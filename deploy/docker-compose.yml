@@ -8,7 +8,7 @@ name: mysimoka-admin
 
 services:
   admin:
-    image: ${IMAGE:-ghcr.io/whois-arvian/mysimoka-admin}:${IMAGE_TAG:-main}
+    image: ${IMAGE:-ghcr.io/neo-ruang-ekspresi/mysimoka-admin}:${IMAGE_TAG:-main}
     container_name: mysimoka-admin
     restart: unless-stopped
     # No published ports: the `nginx` container reaches this service as

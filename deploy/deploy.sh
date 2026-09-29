@@ -63,7 +63,7 @@ export IMAGE_TAG="$remote_sha"
 # origin/main with `git archive`, so HEAD only moves after a successful build.
 build_local="$(sed -n 's/^[[:space:]]*BUILD_LOCAL[[:space:]]*=[[:space:]]*//p' .env | tail -n 1 | tr -d '\015')"
 image_name="$(sed -n 's/^[[:space:]]*IMAGE[[:space:]]*=[[:space:]]*//p' .env | tail -n 1 | tr -d '\015')"
-image_name="${image_name:-ghcr.io/whois-arvian/mysimoka-admin}"
+image_name="${image_name:-ghcr.io/neo-ruang-ekspresi/mysimoka-admin}"
 
 if [ "$build_local" = "1" ]; then
   log "building ${image_name}:${remote_sha:0:8} locally"

@@ -7,7 +7,7 @@ the server pulls it itself via `deploy/deploy.sh` from cron. GitHub holds no ser
 |------|-------|
 | Host | `43.163.117.147`, user `ubuntu` |
 | Repo clone | `/home/ubuntu/mysimoka-admin` (stack in `deploy/`, `.env` there) |
-| Image | `ghcr.io/whois-arvian/mysimoka-admin:<commit sha>` |
+| Image | `ghcr.io/neo-ruang-ekspresi/mysimoka-admin:<commit sha>` |
 | Container | `mysimoka-admin` (compose project `mysimoka-admin`), port `8080`, no host port |
 | Reverse proxy | `nginx` container on network `nginx_net`, owns 80/443 |
 | Vhost | `/home/ubuntu/app/nginx/conf.d/admin.mysimoka.id.conf` (source: `deploy/admin.mysimoka.id.conf`) |
@@ -26,7 +26,7 @@ otherwise the page loads but login fails:
 ## 1. GHCR read token
 
 Push to `main` → the `CI` workflow publishes the image. The package is private by default.
-Create a **classic** PAT on the `whois-arvian` account with scope **`read:packages`** only.
+Create a **classic** PAT (scope **`read:packages`** only) on an account that can read packages of the `Neo-Ruang-Ekspresi` org, e.g. `whois-arvian`.
 
 Do **not** `docker login` in `~/.docker` (its `ghcr.io` slot belongs to other stacks);
 `deploy.sh` uses its own config dir `deploy/.docker`.
@@ -35,7 +35,7 @@ Do **not** `docker login` in `~/.docker` (its `ghcr.io` slot belongs to other st
 
 ```bash
 cd /home/ubuntu
-git clone https://github.com/whois-arvian/mysimoka-admin.git   # private repo: use a deploy key or token
+git clone https://github.com/Neo-Ruang-Ekspresi/mysimoka-admin.git   # private repo: use a deploy key or token
 cd mysimoka-admin/deploy
 cp .env.example .env
 mkdir -m 700 .docker
