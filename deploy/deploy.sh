@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Pulls the latest release and applies it. Nothing is built on this machine.
+# Pulls the latest release and applies it. Nothing is built on this machine,
+# unless BUILD_LOCAL=1 is set in deploy/.env (see below).
 #
 #   cd deploy && ./deploy.sh
 #   cd deploy && ./deploy.sh --force    # apply even without a new commit
@@ -57,9 +58,22 @@ log "release: ${local_sha:0:8} -> ${remote_sha:0:8}"
 # Environment variables win over .env in Compose.
 export IMAGE_TAG="$remote_sha"
 
+# BUILD_LOCAL=1 in .env: build the image here instead of pulling it from GHCR
+# (fallback while GitHub Actions is unavailable). The context is streamed from
+# origin/main with `git archive`, so HEAD only moves after a successful build.
+build_local="$(sed -n 's/^[[:space:]]*BUILD_LOCAL[[:space:]]*=[[:space:]]*//p' .env | tail -n 1 | tr -d '\015')"
+image_name="$(sed -n 's/^[[:space:]]*IMAGE[[:space:]]*=[[:space:]]*//p' .env | tail -n 1 | tr -d '\015')"
+image_name="${image_name:-ghcr.io/whois-arvian/mysimoka-admin}"
+
+if [ "$build_local" = "1" ]; then
+  log "building ${image_name}:${remote_sha:0:8} locally"
+  if ! git -C .. archive --format=tar origin/main | docker build --quiet -t "${image_name}:${remote_sha}" - >/dev/null; then
+    log "FAILED: local build of ${remote_sha:0:8}"
+    exit 1
+  fi
 # Pull FIRST, merge later. If the pull fails with HEAD already moved, the next
 # cron run sees local == origin and never retries.
-if ! pull_err="$(docker compose pull --quiet 2>&1)"; then
+elif ! pull_err="$(docker compose pull --quiet 2>&1)"; then
   if grep -qiE 'denied|unauthorized' <<<"$pull_err"; then
     log "FAILED: ghcr.io refused the pull; token in deploy/.docker missing or expired"
     exit 1
