@@ -93,12 +93,10 @@ Check: `curl -I https://admin.mysimoka.id` → `200`.
 
 ## 5. Renewal
 
-Add `admin.mysimoka.id` to the webroot loop ("Fase 1b") in
-`/usr/local/bin/renew-rentalize-cert.sh`, next to `mysimoka.id`:
-
-```bash
-for cert in mysimoka.id admin.mysimoka.id; do
-```
+Nothing to add. `/home/ubuntu/bin/renew-cert.sh` (user crontab, daily 03:17) runs
+`certbot renew` for **every** certificate under `/home/ubuntu/app/nginx/letsencrypt`, then
+reloads nginx. New webroot certificates are picked up automatically.
+Dry run: `docker run --rm -v /home/ubuntu/app/nginx/letsencrypt:/etc/letsencrypt -v /home/ubuntu/log/letsencrypt:/var/log/letsencrypt certbot/certbot:latest renew --dry-run`
 
 ## Operations
 
