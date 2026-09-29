@@ -3,10 +3,10 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 # Variabel VITE_* di-inline saat build (bukan runtime).
-# Relatif: diproksikan oleh deploy/nginx.conf (location /_auth/), tanpa CORS.
-ARG VITE_AUTH_BASE_URL=/_auth
-ARG VITE_API_BASE_URL=https://api.mysimoka.sunhouse.co.id
-ARG VITE_GRAPHQL_URL=https://hasura.mysimoka.sunhouse.co.id/v1/graphql
+# Backend di server yang sama (43.163.117.147); auth mengirim CORS untuk admin.mysimoka.id.
+ARG VITE_AUTH_BASE_URL=https://auth.mysimoka.id
+ARG VITE_API_BASE_URL=https://api.mysimoka.id
+ARG VITE_GRAPHQL_URL=https://hasura.mysimoka.id/v1/graphql
 ARG VITE_ENABLE_SUPERADMIN_PREVIEW=false
 ENV VITE_AUTH_BASE_URL=$VITE_AUTH_BASE_URL \
     VITE_API_BASE_URL=$VITE_API_BASE_URL \

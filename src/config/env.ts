@@ -1,7 +1,7 @@
 // Default sama persis dengan app mobile (mysimoka/src/services/environment.ts).
-const DEFAULT_API_BASE_URL = 'https://api.mysimoka.sunhouse.co.id/';
-const DEFAULT_AUTH_BASE_URL = 'https://auth.mysimoka.sunhouse.co.id/';
-const DEFAULT_GRAPHQL_URL = 'https://hasura.mysimoka.sunhouse.co.id/v1/graphql';
+const DEFAULT_API_BASE_URL = 'https://api.mysimoka.id/';
+const DEFAULT_AUTH_BASE_URL = 'https://auth.mysimoka.id/';
+const DEFAULT_GRAPHQL_URL = 'https://hasura.mysimoka.id/v1/graphql';
 
 function trimSlash(value: string): string {
   return value.replace(/\/+$/, '');
