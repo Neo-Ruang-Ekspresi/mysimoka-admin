@@ -66,8 +66,15 @@ image_name="$(sed -n 's/^[[:space:]]*IMAGE[[:space:]]*=[[:space:]]*//p' .env | t
 image_name="${image_name:-ghcr.io/neo-ruang-ekspresi/mysimoka-admin}"
 
 if [ "$build_local" = "1" ]; then
+  # VITE_* lines in .env override the Dockerfile defaults (backend URLs are
+  # baked into the bundle), e.g. VITE_AUTH_BASE_URL=https://auth.mysimoka.id.
+  build_args=()
+  while IFS= read -r line; do
+    build_args+=(--build-arg "$line")
+  done < <(grep -E '^VITE_[A-Z_]+=' .env | tr -d '\015' || true)
+
   log "building ${image_name}:${remote_sha:0:8} locally"
-  if ! git -C .. archive --format=tar origin/main | docker build --quiet -t "${image_name}:${remote_sha}" - >/dev/null; then
+  if ! git -C .. archive --format=tar origin/main | docker build --quiet "${build_args[@]}" -t "${image_name}:${remote_sha}" - >/dev/null; then
     log "FAILED: local build of ${remote_sha:0:8}"
     exit 1
   fi

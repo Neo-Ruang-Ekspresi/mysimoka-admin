@@ -110,3 +110,20 @@ docker compose ps && docker compose logs -f
 ```
 
 Rollback: set `IMAGE_TAG=<older sha>` in `deploy/.env`, then `docker compose pull && docker compose up -d`.
+
+## Backend URLs
+
+Backend URLs are baked into the bundle at build time. With `BUILD_LOCAL=1`, `VITE_*` lines in
+`deploy/.env` override the Dockerfile defaults. The default `VITE_AUTH_BASE_URL=/_auth` goes
+through the same-origin proxy in `deploy/nginx.conf` (the old auth service sends no CORS headers).
+
+After the backend moves to this server (see `mysimoka-backend-hasura/DEPLOY.md`):
+
+```bash
+cat >> deploy/.env <<'ENV'
+VITE_AUTH_BASE_URL=https://auth.mysimoka.id
+VITE_API_BASE_URL=https://api.mysimoka.id
+VITE_GRAPHQL_URL=https://hasura.mysimoka.id/v1/graphql
+ENV
+./deploy/deploy.sh --force     # .env changes need --force (no new commit)
+```
