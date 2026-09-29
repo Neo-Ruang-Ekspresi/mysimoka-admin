@@ -1,0 +1,22 @@
+# Production stack for admin.mysimoka.id on 43.163.117.147.
+#
+#   cd deploy && ./deploy.sh
+#
+# Project name must differ from mysimoka-web's (`mysimoka`): `up --remove-orphans`
+# would otherwise remove the landing page container.
+name: mysimoka-admin
+
+services:
+  admin:
+    image: ${IMAGE:-ghcr.io/whois-arvian/mysimoka-admin}:${IMAGE_TAG:-main}
+    container_name: mysimoka-admin
+    restart: unless-stopped
+    # No published ports: the `nginx` container reaches this service as
+    # http://mysimoka-admin:8080 over its network.
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-nginx_net}
