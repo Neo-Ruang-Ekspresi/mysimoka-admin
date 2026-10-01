@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { motion } from 'motion/react';
 import { cn } from '@/lib/object';
 import { EmptyState } from './States';
+import { tableRowVariants } from './Animated';
 
 export type Column<T> = {
   key: string;
@@ -131,12 +133,16 @@ export function DataTable<T>({
               </tr>
             </thead>
             <tbody>
-              {pageRows.map(row => (
-                <tr
+              {pageRows.map((row, index) => (
+                <motion.tr
                   key={getRowId(row)}
+                  custom={index}
+                  variants={tableRowVariants}
+                  initial="hidden"
+                  animate="show"
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   className={cn(
-                    'border-b border-line last:border-0',
+                    'border-b border-line transition-colors last:border-0',
                     onRowClick && 'cursor-pointer hover:bg-brand-50/60 dark:hover:bg-brand-900/20',
                   )}
                 >
@@ -145,7 +151,7 @@ export function DataTable<T>({
                       {column.cell(row)}
                     </td>
                   ))}
-                </tr>
+                </motion.tr>
               ))}
             </tbody>
           </table>

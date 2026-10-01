@@ -14,7 +14,8 @@ import { QueryBoundary } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
 
 export function SchoolProfilePage() {
-  const { schoolId, readOnly } = useSchoolScope();
+  const { schoolId, can } = useSchoolScope();
+  const readOnly = !can.manageSchoolProfile;
   const profile = useSchoolProfile();
   const toast = useToast();
   const [form, setForm] = useState({ name: '', number: '', address: '' });
@@ -46,7 +47,7 @@ export function SchoolProfilePage() {
   return (
     <div>
       <PageHeader title="Profil Sekolah" description="Identitas sekolah dan kode gabung untuk guru." />
-      <QueryBoundary isLoading={profile.isLoading} error={profile.error} onRetry={() => void profile.refetch()}>
+      <QueryBoundary isLoading={profile.isLoading} error={profile.error} onRetry={() => void profile.refetch()} skeleton="form">
         {() =>
           !profile.data ? (
             <Card>
@@ -93,6 +94,7 @@ export function SchoolProfilePage() {
                 </CardBody>
               </Card>
 
+              {can.viewJoinCode ? (
               <Card>
                 <CardHeader title="Kode gabung" description="Dipakai guru untuk bergabung dari aplikasi mobile." />
                 <CardBody className="flex flex-col items-start gap-4">
@@ -115,7 +117,7 @@ export function SchoolProfilePage() {
                         Salin
                       </Button>
                     ) : null}
-                    {!readOnly ? (
+                    {can.manageJoinCode ? (
                       <Button
                         variant="secondary"
                         size="sm"
@@ -128,6 +130,7 @@ export function SchoolProfilePage() {
                   </div>
                 </CardBody>
               </Card>
+              ) : null}
             </div>
           )
         }

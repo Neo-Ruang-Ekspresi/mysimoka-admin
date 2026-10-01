@@ -4,7 +4,9 @@ import { BrowserRouter } from 'react-router';
 import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthExpiredError, PermissionError } from '@/api/errors';
 import { AuthProvider } from '@/auth/AuthContext';
+import { MotionConfig } from 'motion/react';
 import { ToastProvider } from '@/components/ui/Toast';
+import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
 import { applyInitialTheme } from '@/components/layout/theme';
 import { App } from './App';
 import './index.css';
@@ -31,11 +33,15 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <ToastProvider>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
-        </ToastProvider>
+        <MotionConfig reducedMotion="user">
+          <ToastProvider>
+            <ConfirmProvider>
+              <AuthProvider>
+                <App />
+              </AuthProvider>
+            </ConfirmProvider>
+          </ToastProvider>
+        </MotionConfig>
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

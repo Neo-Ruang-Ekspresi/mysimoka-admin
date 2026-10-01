@@ -49,7 +49,7 @@ export function useSessionData(kind: SessionKind) {
 
 export function SessionsPage({ kind }: { kind: SessionKind }) {
   const meta = KIND_META[kind];
-  const { schoolName, basePath, readOnly } = useSchoolScope();
+  const { schoolName, basePath, can } = useSchoolScope();
   const navigate = useNavigate();
   const { sessions, records } = useSessionData(kind);
   const classes = useClasses();
@@ -158,7 +158,7 @@ export function SessionsPage({ kind }: { kind: SessionKind }) {
             : 'Sesi imunisasi per kelas beserta status pemberian vaksin.'
         }
         actions={
-          readOnly ? null : (
+          !can.createSessions ? null : (
             <Button icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
               Buat sesi
             </Button>

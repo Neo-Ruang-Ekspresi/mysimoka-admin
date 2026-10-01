@@ -54,7 +54,7 @@ const CAPTURE_SOURCE_LABEL: Record<string, string> = {
 export function SessionDetailPage({ kind }: { kind: SessionKind }) {
   const meta = KIND_META[kind];
   const { sessionId } = useParams();
-  const { basePath, readOnly, schoolName } = useSchoolScope();
+  const { basePath, can, schoolName } = useSchoolScope();
   const toast = useToast();
   const { sessions, records } = useSessionData(kind);
   const students = useStudents();
@@ -120,7 +120,7 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
       </Card>
     );
   }
-  if (sessions.isLoading || records.isLoading || students.isLoading) return <LoadingState label="Memuat detail sesi…" />;
+  if (sessions.isLoading || records.isLoading || students.isLoading) return <LoadingState label="Memuat detail sesi…" variant="table" />;
   if (!session) {
     return (
       <Card>
@@ -217,7 +217,7 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
     },
     ...(kind === 'measurement' ? measurementColumns : immunizationColumns),
     { key: 'time', header: 'Dicatat', sortValue: row => row.recordedAt, cell: row => <span className="text-xs">{formatDateTime(row.recordedAt)}</span> },
-    ...(readOnly || session.status === 'cancelled'
+    ...(!can.recordData || session.status === 'cancelled'
       ? []
       : [
           {
@@ -261,7 +261,7 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
     ]);
 
   const statusActions: Array<{ status: SessionStatus; label: string; icon: ReactNode; variant: 'secondary' | 'danger' }> = [];
-  if (!readOnly) {
+  if (can.manageSessions) {
     if (session.status === 'active' || session.status === 'draft') {
       statusActions.push({ status: 'completed', label: 'Tandai selesai', icon: <CheckCircle2 className="size-4" />, variant: 'secondary' });
       statusActions.push({ status: 'cancelled', label: 'Batalkan', icon: <XCircle className="size-4" />, variant: 'danger' });

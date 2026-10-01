@@ -15,7 +15,7 @@ import {
 import { ALL_TIME, academicYearPeriod, computeSchoolAnalytics, type Period } from '@/lib/analytics';
 import { formatDate, formatDecimal, formatNumber, formatPercent } from '@/lib/format';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
-import { StatCard } from '@/components/ui/StatCard';
+import { StatCard, StatGrid } from '@/components/ui/StatCard';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ErrorState, LoadingState } from '@/components/ui/States';
 import { FilterSelect } from '@/components/ui/DataTable';
@@ -23,7 +23,7 @@ import { SessionStatusBadge } from '@/components/ui/Badge';
 import { AverageTrendChart, ClassCoverageChart, MonthlyActivityChart, NutritionChart } from '@/components/charts/Charts';
 
 export function OverviewPage() {
-  const { schoolName, basePath, mode } = useSchoolScope();
+  const { schoolName, basePath, mode, can } = useSchoolScope();
   const students = useStudents();
   const classes = useClasses();
   const members = useSchoolMembers();
@@ -92,15 +92,16 @@ export function OverviewPage() {
           <ErrorState error={error} onRetry={() => queries.forEach(query => void query.refetch())} />
         </Card>
       ) : loading || !analytics ? (
-        <Card>
-          <LoadingState label="Menghitung statistik sekolah…" />
-        </Card>
+        <LoadingState label="Menghitung statistik sekolah…" variant="dashboard" />
       ) : (
         <div className="flex flex-col gap-5">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <StatGrid>
             <StatCard label="Siswa aktif" value={formatNumber(analytics.totalStudents)} icon={<Users className="size-4" />} />
             <StatCard label="Kelas" value={formatNumber(analytics.totalClasses)} icon={<School className="size-4" />} />
-            <StatCard label="Guru" value={formatNumber(analytics.totalTeachers)} icon={<GraduationCap className="size-4" />} />
+            {/* Mode guru: daftar guru bisa belum terbuka di Hasura → sembunyikan bila kosong. */}
+            {can.viewTeachers || analytics.totalTeachers > 0 ? (
+              <StatCard label="Guru" value={formatNumber(analytics.totalTeachers)} icon={<GraduationCap className="size-4" />} />
+            ) : null}
             <StatCard
               label="Sesi (periode)"
               value={formatNumber(analytics.measurementSessionCount + analytics.immunizationSessionCount)}
@@ -133,7 +134,7 @@ export function OverviewPage() {
               hint="kg/m² · pengukuran terakhir tiap siswa"
               icon={<Activity className="size-4" />}
             />
-          </div>
+          </StatGrid>
 
           <div className="grid gap-5 xl:grid-cols-3">
             <Card className="xl:col-span-2">

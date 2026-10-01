@@ -19,7 +19,8 @@ import { QueryBoundary } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
 
 export function TeachersPage() {
-  const { schoolName, readOnly } = useSchoolScope();
+  const { schoolName, can } = useSchoolScope();
+  const canEdit = can.manageTeachers;
   const members = useSchoolMembers();
   const profile = useSchoolProfile();
   const toast = useToast();
@@ -77,7 +78,7 @@ export function TeachersPage() {
         title="Guru & Anggota"
         description="Guru dan admin yang terhubung ke sekolah."
         actions={
-          readOnly ? null : (
+          !canEdit ? null : (
             <Button icon={<UserPlus className="size-4" />} onClick={() => setAdding(true)}>
               Tambah guru
             </Button>
@@ -85,7 +86,7 @@ export function TeachersPage() {
         }
       />
 
-      {!readOnly ? (
+      {canEdit ? (
         <Card className="mb-5">
           <CardBody className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -134,7 +135,7 @@ export function TeachersPage() {
               searchPlaceholder="Cari nama / email"
               initialSort={{ key: 'name', dir: 'asc' }}
               emptyTitle="Belum ada guru"
-              emptyDescription={readOnly ? undefined : 'Tambahkan guru atau bagikan kode gabung sekolah.'}
+              emptyDescription={!canEdit ? undefined : 'Tambahkan guru atau bagikan kode gabung sekolah.'}
               filters={
                 <FilterSelect
                   label="Peran"

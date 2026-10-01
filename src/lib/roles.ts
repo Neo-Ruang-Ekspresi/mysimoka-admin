@@ -2,6 +2,7 @@
 // ditambah role baru `super_admin` khusus dashboard ini.
 export const SUPER_ADMIN_ROLE = 'super_admin';
 export const SCHOOL_ADMIN_ROLE = 'school_admin';
+export const TEACHER_ROLE = 'teacher';
 
 export type AppRole = 'super_admin' | 'school_admin' | 'teacher' | 'user' | string;
 
@@ -33,6 +34,15 @@ export function resolveSchoolAdminHasuraRole(rawAllowedRoles: string[]): string 
   if (rawAllowedRoles.length === 0 || rawAllowedRoles.includes('school_admin')) return 'school_admin';
   if (rawAllowedRoles.includes('admin_sekolah')) return 'admin_sekolah';
   return 'school_admin';
+}
+
+/**
+ * Header `x-hasura-role` untuk mode guru. Default `teacher`; bila JWT hanya memuat alias
+ * lama (`school_member`/`anggota_sekolah`), kirim alias itu.
+ */
+export function resolveTeacherHasuraRole(rawAllowedRoles: string[]): string {
+  if (rawAllowedRoles.length === 0 || rawAllowedRoles.includes(TEACHER_ROLE)) return TEACHER_ROLE;
+  return rawAllowedRoles.find(role => normalizeRoleKey(role) === TEACHER_ROLE) ?? TEACHER_ROLE;
 }
 
 export function resolveSuperAdminHasuraRole(rawAllowedRoles: string[]): string {

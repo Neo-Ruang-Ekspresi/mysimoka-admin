@@ -34,7 +34,8 @@ type Row = ClassRow & {
 };
 
 export function ClassesPage() {
-  const { schoolName, readOnly, basePath } = useSchoolScope();
+  const { schoolName, can, basePath } = useSchoolScope();
+  const canEdit = can.manageClasses;
   const navigate = useNavigate();
   const classes = useClasses();
   const students = useStudents();
@@ -88,7 +89,7 @@ export function ClassesPage() {
       cell: row => `${row.immunized} (${formatPercent(pct(row.immunized, row.students))})`,
     },
     { key: 'last', header: 'Sesi ukur terakhir', sortValue: row => row.lastSession, cell: row => formatDate(row.lastSession) },
-    ...(readOnly
+    ...(!canEdit
       ? []
       : [
           {
@@ -129,7 +130,7 @@ export function ClassesPage() {
         title="Kelas"
         description="Daftar kelas beserta cakupan pengukuran & imunisasi. Klik baris untuk melihat siswa."
         actions={
-          readOnly ? null : (
+          !canEdit ? null : (
             <Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>
               Tambah kelas
             </Button>

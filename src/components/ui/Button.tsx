@@ -40,7 +40,7 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+        'inline-flex shrink-0 select-none items-center justify-center rounded-lg font-medium transition-[color,background-color,border-color,box-shadow,transform,filter] duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100 motion-reduce:transition-colors motion-reduce:active:scale-100',
         VARIANTS[variant],
         SIZES[size],
         className,

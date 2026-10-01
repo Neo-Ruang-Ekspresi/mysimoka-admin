@@ -15,6 +15,7 @@ export default defineConfig({
       output: {
         manualChunks(id: string) {
           if (id.includes('node_modules/recharts') || id.includes('node_modules/d3-')) return 'charts';
+          if (/node_modules[\\/](motion|framer-motion|motion-dom|motion-utils)[\\/]/.test(id)) return 'motion';
           if (id.includes('node_modules/react') || id.includes('node_modules/scheduler')) return 'react';
           return undefined;
         },

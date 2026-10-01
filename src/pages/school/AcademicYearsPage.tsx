@@ -19,7 +19,8 @@ import { useToast } from '@/components/ui/Toast';
 type Row = AcademicYearRow & { classCount: number; isLatest: boolean };
 
 export function AcademicYearsPage() {
-  const { readOnly } = useSchoolScope();
+  const { can } = useSchoolScope();
+  const canEdit = can.manageAcademicYears;
   const years = useAcademicYears();
   const classes = useClasses();
   const toast = useToast();
@@ -53,7 +54,7 @@ export function AcademicYearsPage() {
     { key: 'end', header: 'Tahun selesai', sortValue: row => row.end_year, cell: row => row.end_year ?? '-' },
     { key: 'classes', header: 'Kelas (sekolah ini)', sortValue: row => row.classCount, cell: row => row.classCount },
     { key: 'created', header: 'Dibuat', cell: row => formatDate(row.created_at) },
-    ...(readOnly
+    ...(!canEdit
       ? []
       : [
           {
@@ -88,7 +89,7 @@ export function AcademicYearsPage() {
         title="Tahun Ajaran"
         description="Tahun ajaran dipakai saat membuat kelas dan sebagai filter periode ringkasan."
         actions={
-          readOnly ? null : (
+          !canEdit ? null : (
             <Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>
               Tambah tahun ajaran
             </Button>

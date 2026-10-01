@@ -1,24 +1,50 @@
 import type { ReactNode } from 'react';
+import { motion } from 'motion/react';
 import { AlertTriangle, Inbox, Loader2, RefreshCw, ShieldAlert, WifiOff } from 'lucide-react';
 import { NetworkError, PermissionError, errorMessage } from '@/api/errors';
 import { cn } from '@/lib/object';
 import { Button } from './Button';
+import { Skeleton, SkeletonDashboard, SkeletonForm, SkeletonStatGrid, SkeletonTable } from './Skeleton';
+
+export { Skeleton };
+
+export type LoadingVariant = 'spinner' | 'table' | 'form' | 'cards' | 'dashboard';
 
 export function Spinner({ className }: { className?: string }) {
   return <Loader2 className={cn('size-5 animate-spin text-brand-500', className)} aria-label="Memuat" />;
 }
 
-export function LoadingState({ label = 'Memuat data…', className }: { label?: string; className?: string }) {
+/**
+ * Loading. `variant` memilih skeleton yang mirip konten akhir (lebih halus dari spinner):
+ * table → di dalam Card berisi DataTable, form → form profil, cards → grid StatCard,
+ * dashboard → stat + grafik. Default spinner (untuk gate/halaman penuh).
+ */
+export function LoadingState({
+  label = 'Memuat data…',
+  className,
+  variant = 'spinner',
+}: {
+  label?: string;
+  className?: string;
+  variant?: LoadingVariant;
+}) {
+  if (variant !== 'spinner') {
+    return (
+      <div className={className} role="status" aria-busy="true">
+        <span className="sr-only">{label}</span>
+        {variant === 'table' ? <SkeletonTable /> : null}
+        {variant === 'form' ? <SkeletonForm /> : null}
+        {variant === 'cards' ? <SkeletonStatGrid /> : null}
+        {variant === 'dashboard' ? <SkeletonDashboard /> : null}
+      </div>
+    );
+  }
   return (
-    <div className={cn('flex flex-col items-center justify-center gap-3 py-14 text-sm text-fg-subtle', className)}>
+    <div className={cn('flex flex-col items-center justify-center gap-3 py-14 text-sm text-fg-subtle', className)} role="status">
       <Spinner className="size-6" />
       {label}
     </div>
   );
-}
-
-export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('animate-pulse rounded-md bg-card-muted', className)} />;
 }
 
 export function EmptyState({
@@ -97,21 +123,27 @@ export function ErrorState({
   );
 }
 
-/** Helper: render loading/error/konten sesuai status query. */
+/** Helper: render loading/error/konten sesuai status query. Default skeleton tabel. */
 export function QueryBoundary({
   isLoading,
   error,
   onRetry,
   children,
   loadingLabel,
+  skeleton = 'table',
 }: {
   isLoading: boolean;
   error: unknown;
   onRetry?: () => void;
   children: () => ReactNode;
   loadingLabel?: string;
+  skeleton?: LoadingVariant;
 }) {
   if (error) return <ErrorState error={error} onRetry={onRetry} />;
-  if (isLoading) return <LoadingState label={loadingLabel} />;
-  return <>{children()}</>;
+  if (isLoading) return <LoadingState label={loadingLabel} variant={skeleton} />;
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
+      {children()}
+    </motion.div>
+  );
 }

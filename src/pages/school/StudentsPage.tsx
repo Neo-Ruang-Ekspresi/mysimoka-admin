@@ -30,7 +30,8 @@ import { useToast } from '@/components/ui/Toast';
 type Row = StudentView & { latest: MeasurementView | null; immunizationCount: number };
 
 export function StudentsPage() {
-  const { schoolName, readOnly } = useSchoolScope();
+  const { schoolName, can } = useSchoolScope();
+  const canEdit = can.manageStudents;
   const students = useStudents();
   const classes = useClasses();
   const mRecords = useMeasurementRecords();
@@ -130,7 +131,7 @@ export function StudentsPage() {
       header: 'Status',
       cell: row => <Badge tone={row.isActive ? 'success' : 'neutral'}>{row.isActive ? 'Aktif' : 'Nonaktif'}</Badge>,
     },
-    ...(readOnly
+    ...(!canEdit
       ? []
       : [
           {
@@ -185,7 +186,7 @@ export function StudentsPage() {
         title="Siswa"
         description="Data siswa, pengukuran terakhir, dan status gizi."
         actions={
-          readOnly ? null : (
+          !canEdit ? null : (
             <Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>
               Tambah siswa
             </Button>
@@ -212,7 +213,7 @@ export function StudentsPage() {
               onRowClick={setDetail}
               initialSort={{ key: 'name', dir: 'asc' }}
               emptyTitle="Belum ada siswa"
-              emptyDescription={readOnly ? undefined : 'Tambahkan siswa baru atau gunakan aplikasi mobile.'}
+              emptyDescription={!canEdit ? undefined : 'Tambahkan siswa baru atau gunakan aplikasi mobile.'}
               filters={
                 <>
                   <FilterSelect

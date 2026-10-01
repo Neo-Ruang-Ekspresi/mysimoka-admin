@@ -2,6 +2,9 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from '@/api/school';
 import { useSchoolScope } from '@/scope/SchoolScope';
+import { useAuth } from '@/auth/AuthContext';
+import { PermissionError } from '@/api/errors';
+import type { SchoolRow } from '@/api/types';
 import { buildStudents } from '@/lib/analytics';
 
 // Semua query sekolah diberi prefix ['school', schoolId, role] agar mudah di-invalidate.
@@ -11,8 +14,32 @@ function useKey(...parts: string[]) {
 }
 
 export function useSchoolProfile() {
-  const { schoolId, role } = useSchoolScope();
-  return useQuery({ queryKey: useKey('profile'), queryFn: () => api.fetchSchool(schoolId, role) });
+  const { schoolId, role, mode } = useSchoolScope();
+  const { teacherSchools } = useAuth();
+  const fallback = teacherSchools.find(item => item.schoolId === schoolId) ?? null;
+  return useQuery({
+    queryKey: useKey('profile'),
+    queryFn: async (): Promise<SchoolRow | null> => {
+      if (mode !== 'teacher') return api.fetchSchool(schoolId, role);
+      try {
+        return await api.fetchSchoolBasic(schoolId, role);
+      } catch (error) {
+        // Mode guru: bila permission `schools` untuk role teacher belum ada, pakai data
+        // sekolah dari membership guru sendiri (query role `user`).
+        if (!(error instanceof PermissionError) || !fallback) throw error;
+        return {
+          id: fallback.schoolId,
+          name: fallback.name,
+          number: fallback.number,
+          address: fallback.address,
+          join_code: null,
+          created_by: null,
+          created_at: null,
+          updated_at: null,
+        };
+      }
+    },
+  });
 }
 
 export function useClasses() {
@@ -26,8 +53,19 @@ export function useEnrollments() {
 }
 
 export function useSchoolMembers() {
-  const { schoolId, role } = useSchoolScope();
-  return useQuery({ queryKey: useKey('members'), queryFn: () => api.fetchSchoolMemberships(schoolId, role) });
+  const { schoolId, role, mode } = useSchoolScope();
+  return useQuery({
+    queryKey: useKey('members'),
+    queryFn: async () => {
+      try {
+        return await api.fetchSchoolMemberships(schoolId, role);
+      } catch (error) {
+        // Mode guru: permission school_memberships untuk teacher mungkin belum ada → kosong.
+        if (mode === 'teacher' && error instanceof PermissionError) return [];
+        throw error;
+      }
+    },
+  });
 }
 
 export function useMeasurementSessions() {

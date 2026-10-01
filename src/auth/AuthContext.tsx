@@ -12,6 +12,7 @@ import {
   normalizeRoleKey,
   resolveSchoolAdminHasuraRole,
   resolveSuperAdminHasuraRole,
+  resolveTeacherHasuraRole,
   sortRolesByPriority,
 } from '@/lib/roles';
 
@@ -21,9 +22,13 @@ export type AdminSchool = {
   schoolId: string;
   name: string;
   number: string | null;
+  address: string | null;
   membershipId: string;
   isActive: boolean;
 };
+
+/** Sekolah tempat user menjadi guru (bentuk sama dengan AdminSchool). */
+export type TeacherSchool = AdminSchool;
 
 type AuthContextValue = {
   isAuthenticated: boolean;
@@ -35,13 +40,19 @@ type AuthContextValue = {
   hasSuperAdminRole: boolean;
   canSuperAdmin: boolean;
   canSchoolAdmin: boolean;
+  /** User punya membership guru aktif → boleh mode guru (`/pengajar`). */
+  canTeacher: boolean;
   schoolAdminRole: string;
+  /** Header x-hasura-role untuk mode guru (`teacher`). */
+  teacherRole: string;
   superAdminRole: string;
   memberships: MembershipRow[];
   membershipsLoading: boolean;
   membershipsError: unknown;
   adminSchools: AdminSchool[];
   currentSchool: AdminSchool | null;
+  teacherSchools: TeacherSchool[];
+  currentTeacherSchool: TeacherSchool | null;
   setCurrentSchoolId: (schoolId: string) => void;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -55,6 +66,24 @@ function readStoredSchoolId(): string | null {
   } catch {
     return null;
   }
+}
+
+function schoolsForRole(memberships: MembershipRow[], role: 'school_admin' | 'teacher'): AdminSchool[] {
+  const seen = new Map<string, AdminSchool>();
+  for (const item of memberships) {
+    if (normalizeRoleKey(item.role) !== role) continue;
+    if (!item.is_active && !isConnectedMembershipStatus(item.status)) continue;
+    if (seen.has(item.school_id)) continue;
+    seen.set(item.school_id, {
+      schoolId: item.school_id,
+      name: item.school?.name ?? `Sekolah ${item.school_id.slice(0, 8).toUpperCase()}`,
+      number: item.school?.number ?? null,
+      address: item.school?.address ?? null,
+      membershipId: item.id,
+      isActive: item.is_active === true,
+    });
+  }
+  return [...seen.values()].sort((a, b) => Number(b.isActive) - Number(a.isActive) || a.name.localeCompare(b.name));
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -87,25 +116,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const memberships = membershipsQuery.data ?? [];
-  const adminSchools = useMemo<AdminSchool[]>(() => {
-    const seen = new Map<string, AdminSchool>();
-    for (const item of memberships) {
-      if (normalizeRoleKey(item.role) !== 'school_admin') continue;
-      if (!item.is_active && !isConnectedMembershipStatus(item.status)) continue;
-      if (seen.has(item.school_id)) continue;
-      seen.set(item.school_id, {
-        schoolId: item.school_id,
-        name: item.school?.name ?? `Sekolah ${item.school_id.slice(0, 8).toUpperCase()}`,
-        number: item.school?.number ?? null,
-        membershipId: item.id,
-        isActive: item.is_active === true,
-      });
-    }
-    return [...seen.values()].sort((a, b) => Number(b.isActive) - Number(a.isActive) || a.name.localeCompare(b.name));
-  }, [memberships]);
+  const adminSchools = useMemo(() => schoolsForRole(memberships, 'school_admin'), [memberships]);
+  const teacherSchools = useMemo(() => schoolsForRole(memberships, 'teacher'), [memberships]);
 
   const currentSchool =
     adminSchools.find(item => item.schoolId === storedSchoolId) ?? adminSchools[0] ?? null;
+  const currentTeacherSchool =
+    teacherSchools.find(item => item.schoolId === storedSchoolId) ?? teacherSchools[0] ?? null;
 
   const setCurrentSchoolId = useCallback((schoolId: string) => {
     setStoredSchoolId(schoolId);
@@ -143,13 +160,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hasSuperAdminRole,
     canSuperAdmin: hasSuperAdminRole || SUPERADMIN_PREVIEW,
     canSchoolAdmin: adminSchools.length > 0 || roles.includes('school_admin'),
+    canTeacher: teacherSchools.length > 0,
     schoolAdminRole: resolveSchoolAdminHasuraRole(rawRoles),
+    teacherRole: resolveTeacherHasuraRole(rawRoles),
     superAdminRole: resolveSuperAdminHasuraRole(rawRoles),
     memberships,
     membershipsLoading: membershipsQuery.isLoading,
     membershipsError: membershipsQuery.error,
     adminSchools,
     currentSchool,
+    teacherSchools,
+    currentTeacherSchool,
     setCurrentSchoolId,
     login,
     logout,

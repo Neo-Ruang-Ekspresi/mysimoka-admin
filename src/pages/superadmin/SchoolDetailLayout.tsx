@@ -1,24 +1,18 @@
-import { NavLink, Outlet, useParams } from 'react-router';
+import { Outlet, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthContext';
 import { fetchSchool } from '@/api/school';
 import { PermissionError } from '@/api/errors';
-import { isUuid, cn } from '@/lib/object';
-import { SchoolScopeProvider } from '@/scope/SchoolScope';
+import { isUuid } from '@/lib/object';
+import { SchoolScopeProvider, buildSchoolScope } from '@/scope/SchoolScope';
+import { schoolPagesFor } from '@/routes/schoolPages';
+import { NavTabs } from '@/components/ui/Tabs';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { SuperAdminNotice } from './SuperAdminNotice';
 
-const TABS = [
-  { to: '', label: 'Ringkasan', end: true },
-  { to: 'siswa', label: 'Siswa' },
-  { to: 'kelas', label: 'Kelas' },
-  { to: 'guru', label: 'Guru' },
-  { to: 'pengukuran', label: 'Pengukuran' },
-  { to: 'imunisasi', label: 'Imunisasi' },
-  { to: 'profil', label: 'Profil' },
-];
+const TABS = schoolPagesFor('super').filter(page => page.inNav !== false);
 
 /** Drill-down sekolah untuk Superadmin — memakai ulang halaman sekolah dalam mode read-only. */
 export function SchoolDetailLayout() {
@@ -43,23 +37,11 @@ export function SchoolDetailLayout() {
         description={school.data ? `${school.data.number ? `NPSN ${school.data.number} · ` : ''}${school.data.address ?? ''}` : undefined}
       />
       <SuperAdminNotice />
-      <nav className="-mx-4 mb-5 flex gap-1 overflow-x-auto border-b border-line px-4 sm:mx-0 sm:px-0" aria-label="Detail sekolah">
-        {TABS.map(tab => (
-          <NavLink
-            key={tab.label}
-            to={tab.to ? `${base}/${tab.to}` : base}
-            end={tab.end}
-            className={({ isActive }) =>
-              cn(
-                '-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-                isActive ? 'border-brand-500 text-brand-600 dark:text-brand-300' : 'border-transparent text-fg-subtle hover:text-fg',
-              )
-            }
-          >
-            {tab.label}
-          </NavLink>
-        ))}
-      </nav>
+      <NavTabs
+        ariaLabel="Detail sekolah"
+        className="-mx-4 mb-5 px-4 sm:mx-0 sm:px-0"
+        items={TABS.map(tab => ({ to: tab.path ? `${base}/${tab.path}` : base, label: tab.tabLabel ?? tab.label, end: tab.path === '' }))}
+      />
       {school.error ? (
         <Card>
           <ErrorState error={school.error} onRetry={() => void school.refetch()} />
@@ -72,14 +54,13 @@ export function SchoolDetailLayout() {
         </Card>
       ) : (
         <SchoolScopeProvider
-          value={{
+          value={buildSchoolScope({
             schoolId,
             schoolName: school.data.name ?? 'Sekolah',
             role: superAdminRole,
-            readOnly: true,
             basePath: base,
             mode: 'super',
-          }}
+          })}
         >
           <Outlet />
         </SchoolScopeProvider>

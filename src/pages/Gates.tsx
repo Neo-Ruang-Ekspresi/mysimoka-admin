@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router';
 import { LogOut, ShieldOff } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
-import { SchoolScopeProvider } from '@/scope/SchoolScope';
+import { SchoolScopeProvider, buildSchoolScope } from '@/scope/SchoolScope';
+import { TEACHER_BASE_PATH } from '@/routes/paths';
 import { Button } from '@/components/ui/Button';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 
@@ -17,9 +18,22 @@ function FullPage({ children }: { children: ReactNode }) {
   return <div className="flex min-h-full items-center justify-center p-4">{children}</div>;
 }
 
-/** Arahkan user ke dashboard sesuai role setelah login. */
+/**
+ * Arahkan user ke dashboard sesuai role setelah login. Prioritas:
+ * super_admin tanpa membership sekolah → /superadmin; admin sekolah → /sekolah;
+ * guru → /pengajar; superadmin preview → /superadmin; selain itu → tidak ada akses.
+ */
 export function RootRedirect() {
-  const { canSchoolAdmin, canSuperAdmin, hasSuperAdminRole, membershipsLoading, membershipsError, adminSchools } = useAuth();
+  const {
+    canSchoolAdmin,
+    canSuperAdmin,
+    canTeacher,
+    hasSuperAdminRole,
+    membershipsLoading,
+    membershipsError,
+    adminSchools,
+    teacherSchools,
+  } = useAuth();
   if (membershipsLoading) {
     return (
       <FullPage>
@@ -27,8 +41,9 @@ export function RootRedirect() {
       </FullPage>
     );
   }
-  if (hasSuperAdminRole && adminSchools.length === 0) return <Navigate to="/superadmin" replace />;
+  if (hasSuperAdminRole && adminSchools.length === 0 && teacherSchools.length === 0) return <Navigate to="/superadmin" replace />;
   if (canSchoolAdmin) return <Navigate to="/sekolah" replace />;
+  if (canTeacher) return <Navigate to={TEACHER_BASE_PATH} replace />;
   if (canSuperAdmin) return <Navigate to="/superadmin" replace />;
   if (membershipsError) {
     return (
@@ -41,20 +56,27 @@ export function RootRedirect() {
 }
 
 export function NoAccessPage() {
-  const { logout, displayName, roles, canSchoolAdmin, canSuperAdmin } = useAuth();
+  const { logout, displayName, roles, canSchoolAdmin, canSuperAdmin, canTeacher, membershipsLoading } = useAuth();
   // Login ulang dengan akun lain kembali ke halaman ini (state `from`); kirim ke dashboard bila kini berhak.
-  if (canSchoolAdmin || canSuperAdmin) return <Navigate to="/" replace />;
+  if (canSchoolAdmin || canSuperAdmin || canTeacher) return <Navigate to="/" replace />;
+  if (membershipsLoading) {
+    return (
+      <FullPage>
+        <LoadingState label="Memeriksa akses…" />
+      </FullPage>
+    );
+  }
   return (
     <FullPage>
       <div className="w-full max-w-md rounded-2xl border border-line bg-card p-6 text-center">
         <EmptyState
           icon={<ShieldOff className="size-6" />}
-          title="Akun tidak memiliki akses admin"
+          title="Akun belum memiliki akses dashboard"
           description={
             <>
-              Halo {displayName}. Dashboard ini hanya untuk <b>Admin Sekolah</b> (role school_admin) dan{' '}
-              <b>Superadmin</b> (role super_admin). Role Anda saat ini: {roles.length > 0 ? roles.join(', ') : '-'}.
-              Guru dapat memakai aplikasi mobile MySimoka.
+              Halo {displayName}. Dashboard ini untuk <b>Admin Sekolah</b>, <b>Guru</b> yang sudah terhubung ke sekolah,
+              dan <b>Superadmin</b>. Role Anda saat ini: {roles.length > 0 ? roles.join(', ') : '-'}. Bila Anda guru,
+              gabung ke sekolah terlebih dahulu memakai kode gabung melalui aplikasi mobile MySimoka, lalu masuk kembali.
             </>
           }
           action={
@@ -103,17 +125,44 @@ export function SchoolAdminGate() {
   }
   return (
     <SchoolScopeProvider
-      value={{
+      value={buildSchoolScope({
         schoolId: currentSchool.schoolId,
         schoolName: currentSchool.name,
         role: schoolAdminRole,
-        readOnly: false,
         basePath: '/sekolah',
         mode: 'school',
-      }}
+      })}
     >
       {/* key → reset state halaman saat sekolah diganti */}
       <div key={currentSchool.schoolId}>
+        <Outlet />
+      </div>
+    </SchoolScopeProvider>
+  );
+}
+
+/** Pastikan user guru di sekolah aktif & sediakan scope mode guru (role Hasura `teacher`). */
+export function TeacherGate() {
+  const { currentTeacherSchool, membershipsLoading, membershipsError, teacherRole } = useAuth();
+  if (membershipsLoading) return <LoadingState label="Memuat data sekolah…" />;
+  if (!currentTeacherSchool) {
+    return membershipsError ? (
+      <ErrorState error={membershipsError} onRetry={() => window.location.reload()} />
+    ) : (
+      <Navigate to="/" replace />
+    );
+  }
+  return (
+    <SchoolScopeProvider
+      value={buildSchoolScope({
+        schoolId: currentTeacherSchool.schoolId,
+        schoolName: currentTeacherSchool.name,
+        role: teacherRole,
+        basePath: TEACHER_BASE_PATH,
+        mode: 'teacher',
+      })}
+    >
+      <div key={currentTeacherSchool.schoolId}>
         <Outlet />
       </div>
     </SchoolScopeProvider>

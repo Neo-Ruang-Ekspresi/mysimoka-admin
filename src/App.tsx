@@ -1,66 +1,32 @@
 import { Route, Routes } from 'react-router';
-import {
-  Building2,
-  CalendarRange,
-  GraduationCap,
-  LayoutDashboard,
-  Ruler,
-  School,
-  Syringe,
-  UserCog,
-  Users,
-  BarChart3,
-} from 'lucide-react';
+import { BarChart3, Building2, UserCog } from 'lucide-react';
 import { AppLayout, type NavItem } from '@/components/layout/AppLayout';
 import { LoginPage } from '@/pages/LoginPage';
-import { NoAccessPage, NotFoundPage, RequireAuth, RootRedirect, SchoolAdminGate, SuperAdminGate } from '@/pages/Gates';
-import { OverviewPage } from '@/pages/school/OverviewPage';
-import { StudentsPage } from '@/pages/school/StudentsPage';
-import { ClassesPage } from '@/pages/school/ClassesPage';
-import { TeachersPage } from '@/pages/school/TeachersPage';
-import { AcademicYearsPage } from '@/pages/school/AcademicYearsPage';
-import { SessionsPage } from '@/pages/school/SessionsPage';
-import { SessionDetailPage } from '@/pages/school/SessionDetailPage';
-import { SchoolProfilePage } from '@/pages/school/SchoolProfilePage';
+import {
+  NoAccessPage,
+  NotFoundPage,
+  RequireAuth,
+  RootRedirect,
+  SchoolAdminGate,
+  SuperAdminGate,
+  TeacherGate,
+} from '@/pages/Gates';
 import { GlobalOverviewPage } from '@/pages/superadmin/GlobalOverviewPage';
 import { SchoolsPage } from '@/pages/superadmin/SchoolsPage';
 import { SchoolDetailLayout } from '@/pages/superadmin/SchoolDetailLayout';
 import { UsersPage } from '@/pages/superadmin/UsersPage';
+import { SCHOOL_BASE_PATH, SUPER_BASE_PATH, TEACHER_BASE_PATH } from '@/routes/paths';
+import { schoolNavFor, schoolRoutes } from '@/routes/schoolPages';
 
-const SCHOOL_NAV: NavItem[] = [
-  { to: '/sekolah', label: 'Ringkasan', icon: LayoutDashboard, end: true },
-  { to: '/sekolah/siswa', label: 'Siswa', icon: Users },
-  { to: '/sekolah/kelas', label: 'Kelas', icon: School },
-  { to: '/sekolah/guru', label: 'Guru', icon: GraduationCap },
-  { to: '/sekolah/tahun-ajaran', label: 'Tahun Ajaran', icon: CalendarRange },
-  { to: '/sekolah/pengukuran', label: 'Sesi Pengukuran', icon: Ruler },
-  { to: '/sekolah/imunisasi', label: 'Sesi Imunisasi', icon: Syringe },
-  { to: '/sekolah/profil', label: 'Profil Sekolah', icon: Building2 },
-];
+// Menu sekolah diturunkan dari registri halaman (routes/schoolPages.tsx) per mode.
+const SCHOOL_NAV = schoolNavFor('school', SCHOOL_BASE_PATH);
+const TEACHER_NAV = schoolNavFor('teacher', TEACHER_BASE_PATH);
 
 const SUPER_NAV: NavItem[] = [
-  { to: '/superadmin', label: 'Statistik Global', icon: BarChart3, end: true },
-  { to: '/superadmin/sekolah', label: 'Sekolah', icon: Building2 },
-  { to: '/superadmin/pengguna', label: 'Pengguna', icon: UserCog },
+  { to: SUPER_BASE_PATH, label: 'Statistik Global', icon: BarChart3, end: true },
+  { to: `${SUPER_BASE_PATH}/sekolah`, label: 'Sekolah', icon: Building2 },
+  { to: `${SUPER_BASE_PATH}/pengguna`, label: 'Pengguna', icon: UserCog },
 ];
-
-/** Halaman sekolah — dipakai ulang oleh admin sekolah & drill-down superadmin. */
-function schoolRoutes(options: { withAdminPages: boolean }) {
-  return (
-    <>
-      <Route index element={<OverviewPage />} />
-      <Route path="siswa" element={<StudentsPage />} />
-      <Route path="kelas" element={<ClassesPage />} />
-      <Route path="guru" element={<TeachersPage />} />
-      {options.withAdminPages ? <Route path="tahun-ajaran" element={<AcademicYearsPage />} /> : null}
-      <Route path="pengukuran" element={<SessionsPage kind="measurement" />} />
-      <Route path="pengukuran/:sessionId" element={<SessionDetailPage kind="measurement" />} />
-      <Route path="imunisasi" element={<SessionsPage kind="immunization" />} />
-      <Route path="imunisasi/:sessionId" element={<SessionDetailPage kind="immunization" />} />
-      <Route path="profil" element={<SchoolProfilePage />} />
-    </>
-  );
-}
 
 export function App() {
   return (
@@ -83,17 +49,27 @@ export function App() {
         }
       />
       <Route
-        path="/sekolah"
+        path={SCHOOL_BASE_PATH}
         element={
           <RequireAuth>
             <AppLayout items={SCHOOL_NAV} mode="school" subtitle="Admin Sekolah" />
           </RequireAuth>
         }
       >
-        <Route element={<SchoolAdminGate />}>{schoolRoutes({ withAdminPages: true })}</Route>
+        <Route element={<SchoolAdminGate />}>{schoolRoutes('school')}</Route>
       </Route>
       <Route
-        path="/superadmin"
+        path={TEACHER_BASE_PATH}
+        element={
+          <RequireAuth>
+            <AppLayout items={TEACHER_NAV} mode="teacher" subtitle="Guru" />
+          </RequireAuth>
+        }
+      >
+        <Route element={<TeacherGate />}>{schoolRoutes('teacher')}</Route>
+      </Route>
+      <Route
+        path={SUPER_BASE_PATH}
         element={
           <RequireAuth>
             <SuperAdminGate>
@@ -105,7 +81,7 @@ export function App() {
         <Route index element={<GlobalOverviewPage />} />
         <Route path="sekolah" element={<SchoolsPage />} />
         <Route path="sekolah/:schoolId" element={<SchoolDetailLayout />}>
-          {schoolRoutes({ withAdminPages: false })}
+          {schoolRoutes('super')}
         </Route>
         <Route path="pengguna" element={<UsersPage />} />
       </Route>
