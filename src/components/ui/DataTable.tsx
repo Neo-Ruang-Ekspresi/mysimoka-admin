@@ -17,6 +17,14 @@ export type Column<T> = {
 
 const PAGE_SIZES = [10, 25, 50, 100];
 
+/** Multi-select opsional. State dipegang pemanggil agar bulk action bisa memakainya. */
+export type TableSelection<T> = {
+  selected: ReadonlySet<string>;
+  onChange: (next: Set<string>) => void;
+  /** Baris yang boleh dipilih (default semua). */
+  isSelectable?: (row: T) => boolean;
+};
+
 export function DataTable<T>({
   rows,
   columns,
@@ -30,6 +38,9 @@ export function DataTable<T>({
   emptyDescription,
   initialSort,
   initialPageSize = 10,
+  selection,
+  bulkActions,
+  emptyAction,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -43,6 +54,11 @@ export function DataTable<T>({
   emptyDescription?: ReactNode;
   initialSort?: { key: string; dir: 'asc' | 'desc' };
   initialPageSize?: number;
+  selection?: TableSelection<T>;
+  /** Toolbar aksi massal; tampil saat ada baris terpilih. */
+  bulkActions?: (selectedRows: T[], clear: () => void) => ReactNode;
+  /** CTA pada empty state (data kosong, bukan hasil filter). */
+  emptyAction?: ReactNode;
 }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState(initialSort ?? null);
@@ -73,9 +89,34 @@ export function DataTable<T>({
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   useEffect(() => {
     setPage(1);
-  }, [query, pageSize, rows]);
+  }, [query, pageSize, rows.length]);
   const safePage = Math.min(page, pageCount);
   const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  const canSelect = (row: T) => (selection?.isSelectable ? selection.isSelectable(row) : true);
+  const selectedRows = selection ? rows.filter(row => selection.selected.has(getRowId(row))) : [];
+  const selectableFiltered = selection ? filtered.filter(canSelect) : [];
+  const allSelected =
+    selectableFiltered.length > 0 && selectableFiltered.every(row => selection?.selected.has(getRowId(row)));
+  const someSelected = !allSelected && selectableFiltered.some(row => selection?.selected.has(getRowId(row)));
+  const clearSelection = () => selection?.onChange(new Set());
+  const toggleAll = () => {
+    if (!selection) return;
+    const next = new Set(selection.selected);
+    for (const row of selectableFiltered) {
+      if (allSelected) next.delete(getRowId(row));
+      else next.add(getRowId(row));
+    }
+    selection.onChange(next);
+  };
+  const toggleRow = (row: T) => {
+    if (!selection) return;
+    const id = getRowId(row);
+    const next = new Set(selection.selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selection.onChange(next);
+  };
 
   const toggleSort = (key: string) => {
     setSort(current => (current?.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
@@ -102,16 +143,42 @@ export function DataTable<T>({
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
 
+      {selection && bulkActions && selectedRows.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-line bg-brand-50/70 px-4 py-2 text-sm dark:bg-brand-900/25">
+          <span className="font-medium text-fg">{selectedRows.length} dipilih</span>
+          <button type="button" onClick={clearSelection} className="text-xs text-brand-600 hover:underline dark:text-brand-300">
+            Batal pilih
+          </button>
+          <div className="ml-auto flex flex-wrap items-center gap-2">{bulkActions(selectedRows, clearSelection)}</div>
+        </div>
+      ) : null}
+
       {filtered.length === 0 ? (
         <EmptyState
           title={rows.length === 0 ? emptyTitle : 'Tidak ada hasil'}
           description={rows.length === 0 ? emptyDescription : 'Coba ubah kata kunci atau filter.'}
+          action={rows.length === 0 ? emptyAction : undefined}
         />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
               <tr className="border-b border-line bg-card-muted/60 text-xs uppercase tracking-wide text-fg-subtle">
+                {selection ? (
+                  <th scope="col" className="w-10 px-4 py-2.5">
+                    <input
+                      type="checkbox"
+                      aria-label="Pilih semua"
+                      className="size-4 cursor-pointer accent-brand-500"
+                      checked={allSelected}
+                      ref={element => {
+                        if (element) element.indeterminate = someSelected;
+                      }}
+                      disabled={selectableFiltered.length === 0}
+                      onChange={toggleAll}
+                    />
+                  </th>
+                ) : null}
                 {columns.map(column => (
                   <th key={column.key} scope="col" className={cn('px-4 py-2.5 font-medium', column.headerClassName)}>
                     {column.sortValue ? (
@@ -146,6 +213,19 @@ export function DataTable<T>({
                     onRowClick && 'cursor-pointer hover:bg-brand-50/60 dark:hover:bg-brand-900/20',
                   )}
                 >
+                  {selection ? (
+                    <td className="w-10 px-4 py-3 align-middle" onClick={event => event.stopPropagation()}>
+                      {canSelect(row) ? (
+                        <input
+                          type="checkbox"
+                          aria-label="Pilih baris"
+                          className="size-4 cursor-pointer accent-brand-500"
+                          checked={selection.selected.has(getRowId(row))}
+                          onChange={() => toggleRow(row)}
+                        />
+                      ) : null}
+                    </td>
+                  ) : null}
                   {columns.map(column => (
                     <td key={column.key} className={cn('px-4 py-3 align-middle text-fg', column.className)}>
                       {column.cell(row)}

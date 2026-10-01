@@ -20,7 +20,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { ErrorState, LoadingState } from '@/components/ui/States';
 import { FilterSelect } from '@/components/ui/DataTable';
 import { SessionStatusBadge } from '@/components/ui/Badge';
-import { AverageTrendChart, ClassCoverageChart, MonthlyActivityChart, NutritionChart } from '@/components/charts/Charts';
+import { AverageTrendChart, ClassCoverageChart, MonthlyActivityChart } from '@/components/charts/Charts';
+import { OverviewReportWidgets } from '@/pages/school/reports/OverviewReportWidgets';
 
 export function OverviewPage() {
   const { schoolName, basePath, mode, can } = useSchoolScope();
@@ -136,23 +137,13 @@ export function OverviewPage() {
             />
           </StatGrid>
 
-          <div className="grid gap-5 xl:grid-cols-3">
-            <Card className="xl:col-span-2">
-              <CardHeader title="Aktivitas per bulan" description="Jumlah record pengukuran & imunisasi yang diberikan (12 bulan terakhir dalam periode)." />
-              <CardBody>
-                <MonthlyActivityChart data={analytics.monthly} />
-              </CardBody>
-            </Card>
-            <Card>
-              <CardHeader
-                title="Distribusi status gizi"
-                description="Kategori IMT dari pengukuran terakhir (ambang sama dengan app mobile)."
-              />
-              <CardBody>
-                <NutritionChart data={analytics.nutrition} />
-              </CardBody>
-            </Card>
-          </div>
+          {/* Status gizi ada di widget laporan (WHO 2007 IMT/U) di bawah. */}
+          <Card>
+            <CardHeader title="Aktivitas per bulan" description="Jumlah record pengukuran & imunisasi yang diberikan (12 bulan terakhir dalam periode)." />
+            <CardBody>
+              <MonthlyActivityChart data={analytics.monthly} />
+            </CardBody>
+          </Card>
 
           <div className="grid gap-5 xl:grid-cols-2">
             <Card>
@@ -182,6 +173,10 @@ export function OverviewPage() {
               </CardBody>
             </Card>
           </div>
+
+          {/* --- Widget laporan (WHO 2007 & imunisasi) — milik modul laporan, lihat pages/school/reports --- */}
+          <OverviewReportWidgets period={period} />
+          {/* --- akhir widget laporan --- */}
 
           <Card>
             <CardHeader

@@ -1,33 +1,91 @@
-import { useState, type FormEvent } from 'react';
-import { Copy, Download, KeyRound, UserPlus } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Copy, Download, KeyRound, PauseCircle, PlayCircle, ShieldCheck, UserMinus, UserPlus } from 'lucide-react';
+import { useAuth } from '@/auth/AuthContext';
 import { useSchoolScope } from '@/scope/SchoolScope';
 import { useSchoolMembers, useSchoolMutation, useSchoolProfile } from '@/hooks/useSchoolData';
-import { addTeacher } from '@/api/school';
+import { useDrawerState } from '@/hooks/useCrud';
+import {
+  addTeacher,
+  deleteMembership,
+  MEMBER_ROLE_OPTIONS,
+  setMembershipEnabled,
+  updateMembership,
+  type MemberRole,
+} from '@/api/crud/teachers';
 import { errorMessage } from '@/api/errors';
 import type { MembershipRow } from '@/api/types';
 import { formatDate, initials } from '@/lib/format';
 import { downloadCsv, slugify } from '@/lib/csv';
-import { normalizeRoleKey, roleLabel } from '@/lib/roles';
+import { isConnectedMembershipStatus, normalizeRoleKey, roleLabel } from '@/lib/roles';
 import { Card, CardBody } from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, FilterSelect, type Column } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
-import { Field, FormError, Input } from '@/components/ui/Form';
+import { Drawer } from '@/components/ui/Drawer';
+import { Field, FormError, Input, Select } from '@/components/ui/Form';
 import { QueryBoundary } from '@/components/ui/States';
+import { RowActions } from '@/components/ui/RowActions';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
+
+const isEnabled = (row: MembershipRow) => isConnectedMembershipStatus(row.status ?? 'active');
+const memberName = (row: MembershipRow) => row.user?.full_name ?? row.user?.email ?? 'Anggota';
 
 export function TeachersPage() {
   const { schoolName, can } = useSchoolScope();
+  const { userId } = useAuth();
   const canEdit = can.manageTeachers;
   const members = useSchoolMembers();
   const profile = useSchoolProfile();
   const toast = useToast();
-  const [roleFilter, setRoleFilter] = useState('teacher');
-  const [adding, setAdding] = useState(false);
+  const confirm = useConfirm();
+  const [roleFilter, setRoleFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const adder = useDrawerState<true>();
+  const editor = useDrawerState<MembershipRow>();
+  const toggle = useSchoolMutation((input: { id: string; enabled: boolean }, role) => setMembershipEnabled(input.id, input.enabled, role));
+  const remove = useSchoolMutation((id: string, role) => deleteMembership(id, role));
 
-  const rows = (members.data ?? []).filter(item => !roleFilter || normalizeRoleKey(item.role) === roleFilter);
+  const rows = useMemo(
+    () =>
+      (members.data ?? []).filter(item => {
+        if (roleFilter && normalizeRoleKey(item.role) !== roleFilter) return false;
+        if (statusFilter === 'active' && !isEnabled(item)) return false;
+        if (statusFilter === 'inactive' && isEnabled(item)) return false;
+        return true;
+      }),
+    [members.data, roleFilter, statusFilter],
+  );
+
+  const askToggle = (row: MembershipRow) => {
+    const enabled = isEnabled(row);
+    void confirm({
+      title: enabled ? `Nonaktifkan ${memberName(row)}?` : `Aktifkan kembali ${memberName(row)}?`,
+      tone: enabled ? 'danger' : 'primary',
+      confirmLabel: enabled ? 'Nonaktifkan' : 'Aktifkan',
+      message: enabled
+        ? 'Akses akun ini ke sekolah dicabut (tidak bisa melihat data atau mencatat). Data yang sudah dicatat tetap tersimpan dan akses bisa diaktifkan kembali.'
+        : 'Akun ini akan kembali bisa mengakses data sekolah sesuai perannya.',
+      onConfirm: async () => {
+        await toggle.mutateAsync({ id: row.id, enabled: !enabled });
+        toast.success(enabled ? 'Anggota dinonaktifkan.' : 'Anggota diaktifkan kembali.');
+      },
+    });
+  };
+
+  const askRemove = (row: MembershipRow) =>
+    void confirm({
+      title: `Keluarkan ${memberName(row)} dari sekolah?`,
+      tone: 'danger',
+      confirmLabel: 'Keluarkan',
+      message:
+        'Keanggotaan dihapus permanen. Akun pengguna tidak dihapus dan data yang pernah dicatat tetap ada. Untuk bergabung lagi, pengguna harus ditambahkan ulang atau memakai kode gabung.',
+      onConfirm: async () => {
+        await remove.mutateAsync(row.id);
+        toast.success('Anggota dikeluarkan dari sekolah.');
+      },
+    });
 
   const columns: Column<MembershipRow>[] = [
     {
@@ -40,7 +98,10 @@ export function TeachersPage() {
             {initials(row.user?.full_name ?? row.user?.email)}
           </span>
           <div className="min-w-0">
-            <p className="truncate font-medium text-fg">{row.user?.full_name ?? '-'}</p>
+            <p className="truncate font-medium text-fg">
+              {row.user?.full_name ?? '-'}
+              {row.user_id === userId ? <span className="ml-1.5 text-xs font-normal text-fg-subtle">(Anda)</span> : null}
+            </p>
             <p className="truncate text-xs text-fg-subtle">{row.user?.email ?? row.user_id}</p>
           </div>
         </div>
@@ -56,9 +117,36 @@ export function TeachersPage() {
       key: 'status',
       header: 'Status',
       sortValue: row => row.status ?? '',
-      cell: row => <Badge tone={row.status === 'active' ? 'success' : 'warning'}>{row.status === 'active' ? 'Aktif' : row.status ?? '-'}</Badge>,
+      cell: row =>
+        isEnabled(row) ? <Badge tone="success">Aktif</Badge> : <Badge tone="warning">{row.status === 'inactive' ? 'Nonaktif' : row.status ?? '-'}</Badge>,
     },
     { key: 'joined', header: 'Bergabung', sortValue: row => row.joined_at ?? row.created_at, cell: row => formatDate(row.joined_at ?? row.created_at) },
+    ...(!canEdit
+      ? []
+      : [
+          {
+            key: 'actions',
+            header: '',
+            className: 'w-12 text-right',
+            cell: (row: MembershipRow) =>
+              row.user_id === userId ? null : (
+                <RowActions
+                  actions={[
+                    { label: 'Ubah peran', icon: <ShieldCheck className="size-4" />, onSelect: () => editor.show(row) },
+                    isEnabled(row)
+                      ? { label: 'Nonaktifkan', icon: <PauseCircle className="size-4" />, onSelect: () => askToggle(row) }
+                      : { label: 'Aktifkan kembali', icon: <PlayCircle className="size-4" />, onSelect: () => askToggle(row) },
+                    {
+                      label: 'Keluarkan dari sekolah',
+                      icon: <UserMinus className="size-4" />,
+                      tone: 'danger' as const,
+                      onSelect: () => askRemove(row),
+                    },
+                  ]}
+                />
+              ),
+          },
+        ]),
   ];
 
   const exportCsv = () =>
@@ -71,20 +159,15 @@ export function TeachersPage() {
     ]);
 
   const joinCode = profile.data?.join_code;
+  const addButton = !canEdit ? null : (
+    <Button icon={<UserPlus className="size-4" />} onClick={() => adder.show(true)}>
+      Tambah guru
+    </Button>
+  );
 
   return (
     <div>
-      <PageHeader
-        title="Guru & Anggota"
-        description="Guru dan admin yang terhubung ke sekolah."
-        actions={
-          !canEdit ? null : (
-            <Button icon={<UserPlus className="size-4" />} onClick={() => setAdding(true)}>
-              Tambah guru
-            </Button>
-          )
-        }
-      />
+      <PageHeader title="Guru & Anggota" description="Guru dan admin yang terhubung ke sekolah." actions={addButton} />
 
       {canEdit ? (
         <Card className="mb-5">
@@ -95,9 +178,7 @@ export function TeachersPage() {
               </span>
               <div>
                 <p className="text-sm font-semibold text-fg">Undang lewat kode gabung</p>
-                <p className="text-xs text-fg-subtle">
-                  Guru dapat bergabung sendiri dari aplikasi mobile dengan memasukkan kode ini.
-                </p>
+                <p className="text-xs text-fg-subtle">Guru dapat bergabung sendiri dari aplikasi mobile dengan memasukkan kode ini.</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -136,18 +217,31 @@ export function TeachersPage() {
               initialSort={{ key: 'name', dir: 'asc' }}
               emptyTitle="Belum ada guru"
               emptyDescription={!canEdit ? undefined : 'Tambahkan guru atau bagikan kode gabung sekolah.'}
+              emptyAction={addButton}
               filters={
-                <FilterSelect
-                  label="Peran"
-                  value={roleFilter}
-                  onChange={setRoleFilter}
-                  options={[
-                    { value: 'teacher', label: 'Guru' },
-                    { value: 'school_admin', label: 'Admin sekolah' },
-                    { value: 'user', label: 'Pengguna' },
-                    { value: '', label: 'Semua peran' },
-                  ]}
-                />
+                <>
+                  <FilterSelect
+                    label="Peran"
+                    value={roleFilter}
+                    onChange={setRoleFilter}
+                    options={[
+                      { value: '', label: 'Semua peran' },
+                      { value: 'teacher', label: 'Guru' },
+                      { value: 'school_admin', label: 'Admin sekolah' },
+                      { value: 'user', label: 'Pengguna' },
+                    ]}
+                  />
+                  <FilterSelect
+                    label="Status"
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    options={[
+                      { value: '', label: 'Semua status' },
+                      { value: 'active', label: 'Aktif' },
+                      { value: 'inactive', label: 'Nonaktif / menunggu' },
+                    ]}
+                  />
+                </>
               }
               actions={
                 <Button variant="secondary" size="sm" icon={<Download className="size-3.5" />} onClick={exportCsv}>
@@ -158,60 +252,66 @@ export function TeachersPage() {
           )}
         </QueryBoundary>
       </Card>
-      {adding ? <AddTeacherModal onClose={() => setAdding(false)} /> : null}
+      <AddTeacherDrawer key={`add-${adder.key}`} open={adder.open} onClose={adder.close} />
+      <EditMemberDrawer key={`edit-${editor.key}`} open={editor.open} member={editor.target} onClose={editor.close} />
     </div>
   );
 }
 
-function AddTeacherModal({ onClose }: { onClose: () => void }) {
+function AddTeacherDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { schoolId } = useSchoolScope();
   const toast = useToast();
   const [form, setForm] = useState({ fullName: '', email: '', password: '' });
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{ fullName?: string; email?: string; password?: string; form?: string }>({});
   const mutation = useSchoolMutation((input: typeof form, role) => addTeacher({ ...input, schoolId }, role));
 
-  const onSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    setError(null);
-    if (!form.fullName.trim()) return setError('Nama guru wajib diisi.');
-    if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) return setError('Email tidak valid.');
+  const onSubmit = async () => {
+    const next: typeof errors = {};
+    if (!form.fullName.trim()) next.fullName = 'Nama guru wajib diisi.';
+    if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) next.email = 'Email tidak valid.';
+    if (form.password && form.password.length < 6) next.password = 'Password minimal 6 karakter.';
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
     try {
       await mutation.mutateAsync(form);
       toast.success('Guru ditambahkan ke sekolah.');
       onClose();
     } catch (submitError) {
-      setError(errorMessage(submitError));
+      setErrors({ form: errorMessage(submitError) });
     }
   };
 
   return (
-    <Modal
-      open
+    <Drawer
+      open={open}
       title="Tambah guru"
-      description="Sama seperti aplikasi mobile: akun dibuat bila email belum terdaftar, lalu dihubungkan ke sekolah sebagai guru."
+      description="Akun dibuat bila email belum terdaftar, lalu dihubungkan ke sekolah sebagai guru."
       onClose={onClose}
+      onSubmit={() => void onSubmit()}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={mutation.isPending}>
             Batal
           </Button>
-          <Button type="submit" form="teacher-form" loading={mutation.isPending}>
+          <Button type="submit" loading={mutation.isPending}>
             Tambah
           </Button>
         </>
       }
     >
-      <form id="teacher-form" onSubmit={onSubmit} className="flex flex-col gap-4">
-        <FormError message={error} />
-        <Field label="Nama lengkap *">
+      <div className="flex flex-col gap-4">
+        <FormError message={errors.form} />
+        <Field label="Nama lengkap *" error={errors.fullName}>
           {id => <Input id={id} value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} />}
         </Field>
-        <Field label="Email *">
-          {id => (
-            <Input id={id} type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-          )}
+        <Field label="Email *" error={errors.email}>
+          {id => <Input id={id} type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />}
         </Field>
-        <Field label="Password awal" hint="Wajib (min. 6 karakter) jika email belum terdaftar. Diabaikan untuk akun yang sudah ada.">
+        <Field
+          label="Password awal"
+          error={errors.password}
+          hint="Wajib (min. 6 karakter) jika email belum terdaftar. Diabaikan untuk akun yang sudah ada."
+        >
           {id => (
             <Input
               id={id}
@@ -222,7 +322,79 @@ function AddTeacherModal({ onClose }: { onClose: () => void }) {
             />
           )}
         </Field>
-      </form>
-    </Modal>
+      </div>
+    </Drawer>
+  );
+}
+
+function EditMemberDrawer({ open, member, onClose }: { open: boolean; member: MembershipRow | null; onClose: () => void }) {
+  const toast = useToast();
+  const currentRole = member ? normalizeRoleKey(member.role) : 'teacher';
+  const [role, setRole] = useState<MemberRole>(currentRole === 'school_admin' ? 'school_admin' : 'teacher');
+  const [enabled, setEnabled] = useState(member ? isEnabled(member) : true);
+  const [error, setError] = useState<string | null>(null);
+  const mutation = useSchoolMutation(async (_: void, hasuraRole) => {
+    if (!member) return;
+    await updateMembership(
+      member.id,
+      { role, ...(enabled ? { status: 'active' } : { status: 'inactive', isActive: false }) },
+      hasuraRole,
+    );
+  });
+
+  const onSubmit = async () => {
+    setError(null);
+    try {
+      await mutation.mutateAsync();
+      toast.success('Data anggota diperbarui.');
+      onClose();
+    } catch (submitError) {
+      setError(errorMessage(submitError));
+    }
+  };
+
+  return (
+    <Drawer
+      open={open}
+      title="Ubah peran anggota"
+      description={member ? `${memberName(member)} · ${member.user?.email ?? ''}` : undefined}
+      onClose={onClose}
+      onSubmit={() => void onSubmit()}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={mutation.isPending}>
+            Batal
+          </Button>
+          <Button type="submit" loading={mutation.isPending}>
+            Simpan
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <FormError message={error} />
+        <Field
+          label="Peran"
+          hint={role === 'school_admin' ? 'Admin sekolah dapat mengelola kelas, siswa, guru, dan menghapus data.' : 'Guru dapat membuat sesi dan mencatat data.'}
+        >
+          {id => (
+            <Select id={id} value={role} onChange={e => setRole(e.target.value as MemberRole)}>
+              {MEMBER_ROLE_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <label className="flex items-start gap-2 text-sm text-fg">
+          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+          <span>
+            Akses aktif
+            <span className="block text-xs text-fg-subtle">Matikan untuk mencabut akses tanpa mengeluarkan dari sekolah.</span>
+          </span>
+        </label>
+      </div>
+    </Drawer>
   );
 }

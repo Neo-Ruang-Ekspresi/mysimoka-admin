@@ -1,31 +1,28 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Download, Pencil, Plus } from 'lucide-react';
+import { ArrowRightLeft, ArrowUpCircle, Download, Eye, PauseCircle, Pencil, PlayCircle, Plus } from 'lucide-react';
 import { useSchoolScope } from '@/scope/SchoolScope';
-import {
-  useClasses,
-  useImmunizationRecords,
-  useImmunizationSessions,
-  useMeasurementRecords,
-  useMeasurementSessions,
-  useSchoolMutation,
-  useStudents,
-} from '@/hooks/useSchoolData';
-import { createStudent, moveEnrollment, updateStudent, type StudentInput } from '@/api/school';
-import { errorMessage } from '@/api/errors';
-import { latestMeasurementByStudent, toMeasurementView, type MeasurementView, type StudentView } from '@/lib/analytics';
-import { ageInYears, formatDate, formatDateTime, formatDecimal, genderLabel } from '@/lib/format';
+import { useClasses, useImmunizationRecords, useMeasurementRecords, useSchoolMutation, useStudents } from '@/hooks/useSchoolData';
+import { useDrawerState, useSelection } from '@/hooks/useCrud';
+import { setStudentsActive, updateEnrollment } from '@/api/crud/students';
+import { latestMeasurementByStudent, type MeasurementView, type StudentView } from '@/lib/analytics';
+import { ageInYears, formatDate, formatDecimal, genderLabel } from '@/lib/format';
 import { downloadCsv, slugify } from '@/lib/csv';
 import { NUTRITION_CATEGORIES, NUTRITION_COLORS } from '@/lib/nutrition';
 import { Card } from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, FilterSelect, type Column } from '@/components/ui/DataTable';
-import { Badge, ImmunizationStatusBadge } from '@/components/ui/Badge';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
-import { Field, FormError, Input, Select, Textarea } from '@/components/ui/Form';
 import { QueryBoundary } from '@/components/ui/States';
+import { RowActions } from '@/components/ui/RowActions';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
+import { StudentFormDrawer } from './students/StudentFormDrawer';
+import { StudentDetailDrawer } from './students/StudentDetailDrawer';
+import { MoveClassDrawer, type MoveMode } from './students/MoveClassDrawer';
+import { ExportButton } from '@/components/importExport/ExportButton';
+import { ImportStudentsButton } from '@/components/importExport/ImportStudentsButton';
 
 type Row = StudentView & { latest: MeasurementView | null; immunizationCount: number };
 
@@ -41,8 +38,23 @@ export function StudentsPage() {
   const [gender, setGender] = useState('');
   const [nutrition, setNutrition] = useState('');
   const [status, setStatus] = useState('active');
-  const [editing, setEditing] = useState<StudentView | 'new' | null>(null);
-  const [detail, setDetail] = useState<Row | null>(null);
+  const toast = useToast();
+  const confirm = useConfirm();
+  const editor = useDrawerState<StudentView | 'new'>();
+  const viewer = useDrawerState<StudentView>();
+  const mover = useDrawerState<{ mode: MoveMode; students: StudentView[] }>();
+  const selection = useSelection();
+  const setActive = useSchoolMutation(async (input: { rows: StudentView[]; active: boolean }, role) => {
+    await setStudentsActive(input.rows.map(item => item.id), input.active, role);
+    // Aktifkan kembali: enrollment yang tidak aktif ikut diaktifkan agar siswa kembali ke roster.
+    if (input.active) {
+      for (const item of input.rows) {
+        if (item.enrollmentStatus && item.enrollmentStatus !== 'active') {
+          await updateEnrollment(item.enrollmentId, { status: 'active' }, role);
+        }
+      }
+    }
+  });
 
   const rows = useMemo<Row[]>(() => {
     const latest = latestMeasurementByStudent(mRecords.data ?? []);
@@ -57,15 +69,36 @@ export function StudentsPage() {
     }));
   }, [students.data, mRecords.data, iRecords.data]);
 
-  const filtered = rows.filter(row => {
-    if (classFilter && row.classId !== classFilter) return false;
-    if (gender && row.student.gender !== gender) return false;
-    if (status === 'active' && !row.isActive) return false;
-    if (status === 'inactive' && row.isActive) return false;
-    if (nutrition === 'none' && row.latest?.category) return false;
-    if (nutrition && nutrition !== 'none' && row.latest?.category !== nutrition) return false;
-    return true;
-  });
+  const filtered = useMemo(
+    () =>
+      rows.filter(row => {
+        if (classFilter && row.classId !== classFilter) return false;
+        if (gender && row.student.gender !== gender) return false;
+        if (status === 'active' && !row.isActive) return false;
+        if (status === 'inactive' && row.isActive) return false;
+        if (nutrition === 'none' && row.latest?.category) return false;
+        if (nutrition && nutrition !== 'none' && row.latest?.category !== nutrition) return false;
+        return true;
+      }),
+    [rows, classFilter, gender, status, nutrition],
+  );
+
+  const askSetActive = (targets: StudentView[], active: boolean, onDone?: () => void) => {
+    const single = targets.length === 1 ? targets[0].student.full_name : `${targets.length} siswa`;
+    void confirm({
+      title: active ? `Aktifkan kembali ${single}?` : `Nonaktifkan ${single}?`,
+      tone: active ? 'primary' : 'danger',
+      confirmLabel: active ? 'Aktifkan' : 'Nonaktifkan',
+      message: active
+        ? 'Siswa akan kembali muncul di roster kelasnya dan dihitung di statistik.'
+        : 'Siswa tidak lagi muncul di roster sesi dan statistik siswa aktif. Riwayat pengukuran & imunisasi tetap tersimpan, dan siswa bisa diaktifkan kembali (filter "Nonaktif").',
+      onConfirm: async () => {
+        await setActive.mutateAsync({ rows: targets, active });
+        toast.success(active ? `${single} diaktifkan kembali.` : `${single} dinonaktifkan.`);
+        onDone?.();
+      },
+    });
+  };
 
   const columns: Column<Row>[] = [
     {
@@ -137,19 +170,27 @@ export function StudentsPage() {
           {
             key: 'actions',
             header: '',
-            className: 'text-right',
+            className: 'w-12 text-right',
             cell: (row: Row) => (
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<Pencil className="size-3.5" />}
-                onClick={event => {
-                  event.stopPropagation();
-                  setEditing(row);
-                }}
-              >
-                Ubah
-              </Button>
+              <RowActions
+                actions={[
+                  { label: 'Lihat detail', icon: <Eye className="size-4" />, onSelect: () => viewer.show(row) },
+                  { label: 'Ubah', icon: <Pencil className="size-4" />, onSelect: () => editor.show(row) },
+                  {
+                    label: 'Pindah kelas',
+                    icon: <ArrowRightLeft className="size-4" />,
+                    onSelect: () => mover.show({ mode: 'move', students: [row] }),
+                  },
+                  {
+                    label: 'Naik kelas',
+                    icon: <ArrowUpCircle className="size-4" />,
+                    onSelect: () => mover.show({ mode: 'promote', students: [row] }),
+                  },
+                  row.isActive
+                    ? { label: 'Nonaktifkan', icon: <PauseCircle className="size-4" />, tone: 'danger', onSelect: () => askSetActive([row], false) }
+                    : { label: 'Aktifkan kembali', icon: <PlayCircle className="size-4" />, onSelect: () => askSetActive([row], true) },
+                ]}
+              />
             ),
           },
         ]),
@@ -187,7 +228,7 @@ export function StudentsPage() {
         description="Data siswa, pengukuran terakhir, dan status gizi."
         actions={
           !canEdit ? null : (
-            <Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>
+            <Button icon={<Plus className="size-4" />} onClick={() => editor.show('new')}>
               Tambah siswa
             </Button>
           )
@@ -210,10 +251,58 @@ export function StudentsPage() {
               getRowId={row => row.id}
               getSearchText={row => `${row.student.full_name} ${row.student.student_number ?? ''} ${row.student.parent_name ?? ''}`}
               searchPlaceholder="Cari nama / NISN / orang tua"
-              onRowClick={setDetail}
+              onRowClick={row => viewer.show(row)}
               initialSort={{ key: 'name', dir: 'asc' }}
               emptyTitle="Belum ada siswa"
               emptyDescription={!canEdit ? undefined : 'Tambahkan siswa baru atau gunakan aplikasi mobile.'}
+              emptyAction={
+                !canEdit ? undefined : (
+                  <Button icon={<Plus className="size-4" />} onClick={() => editor.show('new')}>
+                    Tambah siswa
+                  </Button>
+                )
+              }
+              selection={canEdit ? selection : undefined}
+              bulkActions={(selectedRows, clear) => (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<ArrowRightLeft className="size-3.5" />}
+                    onClick={() => mover.show({ mode: 'move', students: selectedRows })}
+                  >
+                    Pindah kelas
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<ArrowUpCircle className="size-3.5" />}
+                    onClick={() => mover.show({ mode: 'promote', students: selectedRows })}
+                  >
+                    Naik kelas
+                  </Button>
+                  {selectedRows.some(item => !item.isActive) ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={<PlayCircle className="size-3.5" />}
+                      onClick={() => askSetActive(selectedRows.filter(item => !item.isActive), true, clear)}
+                    >
+                      Aktifkan
+                    </Button>
+                  ) : null}
+                  {selectedRows.some(item => item.isActive) ? (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      icon={<PauseCircle className="size-3.5" />}
+                      onClick={() => askSetActive(selectedRows.filter(item => item.isActive), false, clear)}
+                    >
+                      Nonaktifkan
+                    </Button>
+                  ) : null}
+                </>
+              )}
               filters={
                 <>
                   <FilterSelect
@@ -255,250 +344,42 @@ export function StudentsPage() {
                 </>
               }
               actions={
-                <Button variant="secondary" size="sm" icon={<Download className="size-3.5" />} onClick={exportCsv}>
-                  Ekspor CSV
-                </Button>
+                <>
+                  <ImportStudentsButton />
+                  <ExportButton kind="students" rows={filtered} label="Ekspor data" />
+                  <Button variant="secondary" size="sm" icon={<Download className="size-3.5" />} onClick={exportCsv}>
+                    Ekspor CSV
+                  </Button>
+                </>
               }
             />
           )}
         </QueryBoundary>
       </Card>
 
-      {editing ? (
-        <StudentFormModal
-          student={editing === 'new' ? null : editing}
-          defaultClassId={classFilter}
-          onClose={() => setEditing(null)}
-        />
-      ) : null}
-      {detail ? <StudentDetailModal row={detail} onClose={() => setDetail(null)} /> : null}
+      <StudentFormDrawer
+        key={`form-${editor.key}`}
+        open={editor.open}
+        student={editor.target === 'new' ? null : editor.target}
+        defaultClassId={classFilter}
+        onClose={editor.close}
+      />
+      <StudentDetailDrawer
+        open={viewer.open}
+        student={viewer.target}
+        onClose={viewer.close}
+        onEdit={target => editor.show(target)}
+        onMove={target => mover.show({ mode: 'move', students: [target] })}
+      />
+      <MoveClassDrawer
+        key={`move-${mover.key}`}
+        open={mover.open}
+        mode={mover.target?.mode ?? 'move'}
+        students={mover.target?.students ?? []}
+        onClose={mover.close}
+        onDone={selection.clear}
+      />
     </div>
   );
 }
 
-function StudentFormModal({
-  student,
-  defaultClassId,
-  onClose,
-}: {
-  student: StudentView | null;
-  defaultClassId: string;
-  onClose: () => void;
-}) {
-  const toast = useToast();
-  const classes = useClasses();
-  const s = student?.student;
-  const [form, setForm] = useState({
-    fullName: s?.full_name ?? '',
-    studentNumber: s?.student_number ?? '',
-    gender: (s?.gender as 'male' | 'female' | null) ?? null,
-    dateOfBirth: s?.date_of_birth ?? '',
-    address: s?.address ?? '',
-    parentName: s?.parent_name ?? '',
-    parentPhone: s?.parent_phone ?? '',
-    notes: s?.notes ?? '',
-    classId: student?.classId ?? defaultClassId ?? '',
-    isActive: s?.is_active !== false,
-  });
-  const [error, setError] = useState<string | null>(null);
-
-  const create = useSchoolMutation((input: StudentInput & { classId: string }, role) => createStudent(input, role));
-  const update = useSchoolMutation(async (input: typeof form, role) => {
-    if (!student) return;
-    await updateStudent({ ...input, studentId: student.id, isActive: input.isActive }, role);
-    if (input.classId && input.classId !== student.classId) await moveEnrollment(student.enrollmentId, input.classId, role);
-  });
-  const pending = create.isPending || update.isPending;
-
-  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm(current => ({ ...current, [key]: value }));
-
-  const onSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    setError(null);
-    if (!form.fullName.trim()) return setError('Nama siswa wajib diisi.');
-    if (!form.studentNumber.trim()) return setError('NISN wajib diisi.');
-    if (!form.classId) return setError('Pilih kelas siswa.');
-    try {
-      if (student) {
-        await update.mutateAsync(form);
-        toast.success('Data siswa diperbarui.');
-      } else {
-        await create.mutateAsync(form);
-        toast.success('Siswa baru ditambahkan.');
-      }
-      onClose();
-    } catch (submitError) {
-      setError(errorMessage(submitError));
-    }
-  };
-
-  return (
-    <Modal
-      open
-      size="lg"
-      title={student ? 'Ubah data siswa' : 'Tambah siswa'}
-      description={student ? student.student.full_name : 'Siswa langsung didaftarkan ke kelas terpilih (status aktif).'}
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose} disabled={pending}>
-            Batal
-          </Button>
-          <Button type="submit" form="student-form" loading={pending}>
-            Simpan
-          </Button>
-        </>
-      }
-    >
-      <form id="student-form" onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <FormError message={error} />
-        </div>
-        <Field label="Nama lengkap *" className="sm:col-span-2">
-          {id => <Input id={id} value={form.fullName} onChange={e => set('fullName', e.target.value)} />}
-        </Field>
-        <Field label="NISN *">
-          {id => <Input id={id} inputMode="numeric" value={form.studentNumber} onChange={e => set('studentNumber', e.target.value)} />}
-        </Field>
-        <Field label="Kelas *" hint={student ? 'Mengubah kelas memindahkan enrollment siswa.' : undefined}>
-          {id => (
-            <Select id={id} value={form.classId} onChange={e => set('classId', e.target.value)}>
-              <option value="">Pilih kelas</option>
-              {(classes.data ?? []).map(item => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
-        <Field label="Jenis kelamin">
-          {id => (
-            <Select
-              id={id}
-              value={form.gender ?? ''}
-              onChange={e => set('gender', (e.target.value || null) as 'male' | 'female' | null)}
-            >
-              <option value="">-</option>
-              <option value="male">Laki-laki</option>
-              <option value="female">Perempuan</option>
-            </Select>
-          )}
-        </Field>
-        <Field label="Tanggal lahir">
-          {id => <Input id={id} type="date" value={form.dateOfBirth} onChange={e => set('dateOfBirth', e.target.value)} />}
-        </Field>
-        {student ? (
-          <>
-            <Field label="Nama orang tua">
-              {id => <Input id={id} value={form.parentName} onChange={e => set('parentName', e.target.value)} />}
-            </Field>
-            <Field label="Telepon orang tua">
-              {id => <Input id={id} type="tel" value={form.parentPhone} onChange={e => set('parentPhone', e.target.value)} />}
-            </Field>
-            <Field label="Alamat" className="sm:col-span-2">
-              {id => <Input id={id} value={form.address} onChange={e => set('address', e.target.value)} />}
-            </Field>
-            <Field label="Catatan" className="sm:col-span-2">
-              {id => <Textarea id={id} value={form.notes} onChange={e => set('notes', e.target.value)} />}
-            </Field>
-            <label className="flex items-center gap-2 text-sm text-fg sm:col-span-2">
-              <input
-                type="checkbox"
-                checked={form.isActive}
-                onChange={e => set('isActive', e.target.checked)}
-                className="size-4 accent-brand-500"
-              />
-              Siswa aktif
-            </label>
-          </>
-        ) : null}
-      </form>
-    </Modal>
-  );
-}
-
-function StudentDetailModal({ row, onClose }: { row: Row; onClose: () => void }) {
-  const mSessions = useMeasurementSessions();
-  const iSessions = useImmunizationSessions();
-  const mRecords = useMeasurementRecords();
-  const iRecords = useImmunizationRecords();
-  const sessionName = new Map([...(mSessions.data ?? []), ...(iSessions.data ?? [])].map(item => [item.id, item.name]));
-  const measurements = (mRecords.data ?? []).filter(item => item.student_id === row.id).map(toMeasurementView);
-  const immunizations = (iRecords.data ?? []).filter(item => item.student_id === row.id);
-  const s = row.student;
-
-  return (
-    <Modal open size="lg" title={s.full_name} description={`NISN ${s.student_number ?? '-'} · ${row.className}`} onClose={onClose}>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
-        {[
-          ['Jenis kelamin', genderLabel(s.gender)],
-          ['Tanggal lahir', formatDate(s.date_of_birth)],
-          ['Usia', ageInYears(s.date_of_birth) === null ? '-' : `${ageInYears(s.date_of_birth)} tahun`],
-          ['Orang tua', s.parent_name ?? '-'],
-          ['Telepon', s.parent_phone ?? '-'],
-          ['Alamat', s.address ?? '-'],
-        ].map(([label, value]) => (
-          <div key={label}>
-            <dt className="text-xs text-fg-subtle">{label}</dt>
-            <dd className="text-fg">{value}</dd>
-          </div>
-        ))}
-      </dl>
-
-      <h3 className="mt-6 text-sm font-semibold text-fg">Riwayat pengukuran</h3>
-      {measurements.length === 0 ? (
-        <p className="mt-2 text-sm text-fg-subtle">Belum ada data pengukuran.</p>
-      ) : (
-        <div className="mt-2 overflow-x-auto rounded-lg border border-line">
-          <table className="w-full min-w-[480px] text-sm">
-            <thead className="bg-card-muted/60 text-left text-xs text-fg-subtle">
-              <tr>
-                <th className="px-3 py-2 font-medium">Tanggal</th>
-                <th className="px-3 py-2 font-medium">Sesi</th>
-                <th className="px-3 py-2 font-medium">TB (cm)</th>
-                <th className="px-3 py-2 font-medium">BB (kg)</th>
-                <th className="px-3 py-2 font-medium">IMT</th>
-              </tr>
-            </thead>
-            <tbody>
-              {measurements.map(item => (
-                <tr key={item.record.id} className="border-t border-line">
-                  <td className="px-3 py-2">{formatDateTime(item.record.measured_at)}</td>
-                  <td className="px-3 py-2">{sessionName.get(item.record.session_id) ?? '-'}</td>
-                  <td className="px-3 py-2 tabular-nums">{formatDecimal(item.heightCm)}</td>
-                  <td className="px-3 py-2 tabular-nums">{formatDecimal(item.weightKg)}</td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {formatDecimal(item.bmi)} {item.category ? <span className="text-xs text-fg-subtle">· {item.category}</span> : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <h3 className="mt-6 text-sm font-semibold text-fg">Riwayat imunisasi</h3>
-      {immunizations.length === 0 ? (
-        <p className="mt-2 text-sm text-fg-subtle">Belum ada catatan imunisasi.</p>
-      ) : (
-        <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
-          {immunizations.map(item => (
-            <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
-              <div>
-                <p className="font-medium text-fg">
-                  {item.vaccine_name}
-                  {item.dose_label ? ` · ${item.dose_label}` : ''}
-                </p>
-                <p className="text-xs text-fg-subtle">
-                  {formatDateTime(item.administered_at)} · {sessionName.get(item.session_id) ?? '-'}
-                </p>
-              </div>
-              <ImmunizationStatusBadge status={item.status} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </Modal>
-  );
-}

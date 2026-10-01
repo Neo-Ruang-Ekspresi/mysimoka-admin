@@ -123,7 +123,15 @@ export function AcademicYearsPage() {
         open={Boolean(deleting)}
         danger
         title="Hapus tahun ajaran?"
-        message={`Tahun ajaran ${deleting?.label ?? ''} akan dihapus permanen.`}
+        message={
+          <>
+            Tahun ajaran <b>{deleting?.label ?? ''}</b> akan dihapus permanen.{' '}
+            <span className="font-medium text-danger">
+              Perhatian: tabel tahun ajaran bersifat global — dipakai bersama oleh SEMUA sekolah.
+            </span>{' '}
+            Kelas sekolah lain yang memakai tahun ajaran ini dapat terdampak (penghapusan ditolak server bila masih dipakai).
+          </>
+        }
         confirmLabel="Hapus"
         loading={remove.isPending}
         onClose={() => setDeleting(null)}

@@ -44,6 +44,12 @@ Ringkas, wajib diikuti agar pekerjaan paralel (CRUD, impor/ekspor, grafik/lapora
   - Deklaratif: `<ConfirmDialog open title message tone="danger" onConfirm={async () => …} onClose />`
     (promise resolve → `onClose` dipanggil otomatis). Prop lama `danger`/`loading` tetap didukung.
     Juga masih diekspor dari `Modal.tsx` (kompatibilitas).
+- **RowActions** (`RowActions.tsx`): menu ⋯ per baris tabel (`actions=[{label, icon, onSelect, tone:'danger', hidden, disabled}]`),
+  dirender lewat portal; klik tidak memicu `onRowClick`.
+- **DataTable** multi-select: `selection={useSelection()}` (+ `isSelectable`) dan `bulkActions={(rows, clear) => …}`;
+  `emptyAction` untuk CTA saat data kosong. State form Drawer: `useDrawerState<T>()` (`hooks/useCrud.ts`) →
+  `<Form key={d.key} open={d.open} … onClose={d.close} />` agar animasi tutup tetap mulus & form ter-reset.
+- Error Hasura → pesan Indonesia otomatis lewat `errorMessage()` (`api/errors.ts`: FK, unique/NISN, check, permission).
 - **Toast** (`Toast.tsx`): `const toast = useToast()` atau import global `toast` (bisa di luar komponen).
   `toast.success|error|info|warning(message, { description?, duration? })`.
 - **Skeleton** (`Skeleton.tsx`): `Skeleton`, `SkeletonText lines`, `SkeletonRow`, `SkeletonCard`,

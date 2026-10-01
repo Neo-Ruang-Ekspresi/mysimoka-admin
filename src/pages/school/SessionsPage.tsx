@@ -1,7 +1,6 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Download, Plus } from 'lucide-react';
-import { useAuth } from '@/auth/AuthContext';
+import { CheckCircle2, Download, ExternalLink, Pencil, PlayCircle, Plus, Trash2, XCircle } from 'lucide-react';
 import { useSchoolScope } from '@/scope/SchoolScope';
 import {
   useClasses,
@@ -9,28 +8,26 @@ import {
   useImmunizationSessions,
   useMeasurementRecords,
   useMeasurementSessions,
-  useSchoolMutation,
   useStudents,
 } from '@/hooks/useSchoolData';
-import { createImmunizationSession, createMeasurementSession } from '@/api/school';
-import { errorMessage } from '@/api/errors';
-import type { ImmunizationSessionRow, MeasurementSessionRow, SessionStatus } from '@/api/types';
-import { formatDate, formatPercent, todayIso } from '@/lib/format';
+import { useDrawerState, useSelection } from '@/hooks/useCrud';
+import type { SessionStatus } from '@/api/types';
+import { formatDate, formatPercent } from '@/lib/format';
 import { downloadCsv, slugify } from '@/lib/csv';
 import { Card } from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, FilterSelect, type Column } from '@/components/ui/DataTable';
 import { SESSION_STATUS_LABEL, SessionStatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
-import { Field, FormError, Input, Select, Textarea } from '@/components/ui/Form';
 import { QueryBoundary } from '@/components/ui/States';
-import { useToast } from '@/components/ui/Toast';
+import { RowActions } from '@/components/ui/RowActions';
+import { SessionFormDrawer, type AnySession } from './sessions/SessionFormDrawer';
+import { useSessionActions } from './sessions/useSessionActions';
+import { ExportButton } from '@/components/importExport/ExportButton';
 
 export type SessionKind = 'measurement' | 'immunization';
 
-type AnySession = MeasurementSessionRow & Partial<Pick<ImmunizationSessionRow, 'vaccine_name' | 'dose_label' | 'officer_name'>>;
-type Row = AnySession & { className: string; total: number; recorded: number };
+type Row = AnySession & { className: string; total: number; recorded: number; recordCount: number };
 
 export const KIND_META: Record<SessionKind, { title: string; path: string; noun: string }> = {
   measurement: { title: 'Sesi Pengukuran', path: 'pengukuran', noun: 'pengukuran' },
@@ -56,7 +53,10 @@ export function SessionsPage({ kind }: { kind: SessionKind }) {
   const students = useStudents();
   const [classFilter, setClassFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [creating, setCreating] = useState(false);
+  const editor = useDrawerState<Row | 'new'>();
+  const selection = useSelection();
+  const { askStatus, askDelete } = useSessionActions(kind);
+  const canBulk = can.manageSessions || can.deleteData;
 
   const rows = useMemo<Row[]>(() => {
     const classNameById = new Map((classes.data ?? []).map(item => [item.id, item.name]));
@@ -65,22 +65,27 @@ export function SessionsPage({ kind }: { kind: SessionKind }) {
       if (student.isActive) totalByClass.set(student.classId, (totalByClass.get(student.classId) ?? 0) + 1);
     }
     const recordedBySession = new Map<string, Set<string>>();
+    const countBySession = new Map<string, number>();
     for (const record of (records.data ?? []) as Array<{ session_id: string; student_id: string }>) {
       const set = recordedBySession.get(record.session_id) ?? new Set<string>();
       set.add(record.student_id);
       recordedBySession.set(record.session_id, set);
+      countBySession.set(record.session_id, (countBySession.get(record.session_id) ?? 0) + 1);
     }
     return ((sessions.data ?? []) as AnySession[]).map(item => ({
       ...item,
       className: classNameById.get(item.class_id) ?? 'Kelas tidak diketahui',
       total: totalByClass.get(item.class_id) ?? 0,
       recorded: recordedBySession.get(item.id)?.size ?? 0,
+      recordCount: countBySession.get(item.id) ?? 0,
     }));
   }, [sessions.data, records.data, classes.data, students.data]);
 
-  const filtered = rows.filter(
-    row => (!classFilter || row.class_id === classFilter) && (!statusFilter || row.status === statusFilter),
+  const filtered = useMemo(
+    () => rows.filter(row => (!classFilter || row.class_id === classFilter) && (!statusFilter || row.status === statusFilter)),
+    [rows, classFilter, statusFilter],
   );
+  const openSession = (row: Row) => navigate(`${basePath}/${meta.path}/${row.id}`);
 
   const columns: Column<Row>[] = [
     {
@@ -128,6 +133,47 @@ export function SessionsPage({ kind }: { kind: SessionKind }) {
       ? [{ key: 'officer', header: 'Petugas', cell: (row: Row) => row.officer_name ?? '-' }]
       : []),
     { key: 'status', header: 'Status', sortValue: row => row.status, cell: row => <SessionStatusBadge status={row.status} /> },
+    {
+      key: 'actions',
+      header: '',
+      className: 'w-12 text-right',
+      cell: (row: Row) => {
+        const open = row.status === 'active' || row.status === 'draft';
+        return (
+          <RowActions
+            actions={[
+              { label: 'Buka sesi', icon: <ExternalLink className="size-4" />, onSelect: () => openSession(row) },
+              { label: 'Ubah', icon: <Pencil className="size-4" />, hidden: !can.manageSessions, onSelect: () => editor.show(row) },
+              {
+                label: 'Tandai selesai',
+                icon: <CheckCircle2 className="size-4" />,
+                hidden: !can.manageSessions || !open,
+                onSelect: () => void askStatus([row], 'completed'),
+              },
+              {
+                label: 'Aktifkan kembali',
+                icon: <PlayCircle className="size-4" />,
+                hidden: !can.manageSessions || open,
+                onSelect: () => void askStatus([row], 'active'),
+              },
+              {
+                label: 'Batalkan sesi',
+                icon: <XCircle className="size-4" />,
+                hidden: !can.manageSessions || !open,
+                onSelect: () => void askStatus([row], 'cancelled'),
+              },
+              {
+                label: 'Hapus',
+                icon: <Trash2 className="size-4" />,
+                tone: 'danger',
+                hidden: !can.deleteData,
+                onSelect: () => void askDelete([row]),
+              },
+            ]}
+          />
+        );
+      },
+    },
   ];
 
   const exportCsv = () =>
@@ -159,7 +205,7 @@ export function SessionsPage({ kind }: { kind: SessionKind }) {
         }
         actions={
           !can.createSessions ? null : (
-            <Button icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
+            <Button icon={<Plus className="size-4" />} onClick={() => editor.show('new')}>
               Buat sesi
             </Button>
           )
@@ -182,9 +228,37 @@ export function SessionsPage({ kind }: { kind: SessionKind }) {
               getRowId={row => row.id}
               getSearchText={row => `${row.name} ${row.className} ${row.vaccine_name ?? ''} ${row.officer_name ?? ''}`}
               searchPlaceholder="Cari sesi / kelas"
-              onRowClick={row => navigate(`${basePath}/${meta.path}/${row.id}`)}
+              onRowClick={openSession}
               initialSort={{ key: 'date', dir: 'desc' }}
               emptyTitle={`Belum ada sesi ${meta.noun}`}
+              emptyDescription={can.createSessions ? 'Buat sesi untuk mulai mencatat data per kelas.' : undefined}
+              emptyAction={
+                can.createSessions ? (
+                  <Button icon={<Plus className="size-4" />} onClick={() => editor.show('new')}>
+                    Buat sesi
+                  </Button>
+                ) : undefined
+              }
+              selection={canBulk ? selection : undefined}
+              bulkActions={(selectedRows, clear) => (
+                <>
+                  {can.manageSessions ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={<CheckCircle2 className="size-3.5" />}
+                      onClick={() => void askStatus(selectedRows, 'completed', clear)}
+                    >
+                      Tandai selesai
+                    </Button>
+                  ) : null}
+                  {can.deleteData ? (
+                    <Button variant="danger" size="sm" icon={<Trash2 className="size-3.5" />} onClick={() => void askDelete(selectedRows, clear)}>
+                      Hapus
+                    </Button>
+                  ) : null}
+                </>
+              )}
               filters={
                 <>
                   <FilterSelect
@@ -208,142 +282,27 @@ export function SessionsPage({ kind }: { kind: SessionKind }) {
                 </>
               }
               actions={
-                <Button variant="secondary" size="sm" icon={<Download className="size-3.5" />} onClick={exportCsv}>
-                  Ekspor CSV
-                </Button>
+                <>
+                  <ExportButton kind="recap" />
+                  <Button variant="secondary" size="sm" icon={<Download className="size-3.5" />} onClick={exportCsv}>
+                    Ekspor CSV
+                  </Button>
+                </>
               }
             />
           )}
         </QueryBoundary>
       </Card>
-      {creating ? (
-        <CreateSessionModal
-          kind={kind}
-          onClose={() => setCreating(false)}
-          onCreated={id => navigate(`${basePath}/${meta.path}/${id}`)}
-        />
-      ) : null}
+      <SessionFormDrawer
+        key={editor.key}
+        open={editor.open}
+        kind={kind}
+        session={editor.target === 'new' ? null : editor.target}
+        recordCount={editor.target && editor.target !== 'new' ? editor.target.recordCount : 0}
+        onClose={editor.close}
+        onCreated={id => navigate(`${basePath}/${meta.path}/${id}`)}
+      />
     </div>
   );
 }
 
-function CreateSessionModal({
-  kind,
-  onClose,
-  onCreated,
-}: {
-  kind: SessionKind;
-  onClose: () => void;
-  onCreated: (id: string) => void;
-}) {
-  const { schoolId } = useSchoolScope();
-  const { userId } = useAuth();
-  const toast = useToast();
-  const classes = useClasses();
-  const [form, setForm] = useState({
-    name: '',
-    classId: '',
-    sessionDate: todayIso(),
-    note: '',
-    vaccineName: '',
-    doseLabel: '',
-    officerName: '',
-  });
-  const [error, setError] = useState<string | null>(null);
-  const mutation = useSchoolMutation(async (input: typeof form, role) => {
-    if (!userId) throw new Error('Data user tidak ditemukan. Silakan login ulang.');
-    const base = { schoolId, classId: input.classId, name: input.name, note: input.note, sessionDate: input.sessionDate, createdBy: userId };
-    return kind === 'measurement'
-      ? createMeasurementSession(base, role)
-      : createImmunizationSession(
-          { ...base, vaccineName: input.vaccineName, doseLabel: input.doseLabel, officerName: input.officerName },
-          role,
-        );
-  });
-
-  const set = (key: keyof typeof form, value: string) => setForm(current => ({ ...current, [key]: value }));
-
-  const onSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    setError(null);
-    if (!form.name.trim()) return setError('Nama sesi wajib diisi.');
-    if (!form.classId) return setError('Pilih kelas.');
-    if (!form.sessionDate) return setError('Tanggal sesi wajib diisi.');
-    if (kind === 'immunization' && !form.vaccineName.trim()) return setError('Jenis imunisasi wajib diisi.');
-    try {
-      const id = await mutation.mutateAsync(form);
-      toast.success('Sesi dibuat.');
-      onClose();
-      onCreated(id);
-    } catch (submitError) {
-      setError(errorMessage(submitError));
-    }
-  };
-
-  return (
-    <Modal
-      open
-      size="lg"
-      title={kind === 'measurement' ? 'Buat sesi pengukuran' : 'Buat sesi imunisasi'}
-      description="Sesi langsung berstatus aktif dan dapat diisi dari dashboard ini atau aplikasi mobile."
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose} disabled={mutation.isPending}>
-            Batal
-          </Button>
-          <Button type="submit" form="session-form" loading={mutation.isPending}>
-            Buat sesi
-          </Button>
-        </>
-      }
-    >
-      <form id="session-form" onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <FormError message={error} />
-        </div>
-        <Field label="Nama sesi *" className="sm:col-span-2">
-          {id => (
-            <Input
-              id={id}
-              value={form.name}
-              onChange={e => set('name', e.target.value)}
-              placeholder={kind === 'measurement' ? 'mis. Pengukuran Semester 1' : 'mis. BIAS Campak Rubella'}
-            />
-          )}
-        </Field>
-        <Field label="Kelas *">
-          {id => (
-            <Select id={id} value={form.classId} onChange={e => set('classId', e.target.value)}>
-              <option value="">Pilih kelas</option>
-              {(classes.data ?? []).map(item => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
-        <Field label="Tanggal *">
-          {id => <Input id={id} type="date" value={form.sessionDate} onChange={e => set('sessionDate', e.target.value)} />}
-        </Field>
-        {kind === 'immunization' ? (
-          <>
-            <Field label="Jenis imunisasi / vaksin *">
-              {id => <Input id={id} value={form.vaccineName} onChange={e => set('vaccineName', e.target.value)} placeholder="mis. MR, DT, Td, HPV" />}
-            </Field>
-            <Field label="Dosis">
-              {id => <Input id={id} value={form.doseLabel} onChange={e => set('doseLabel', e.target.value)} placeholder="mis. Dosis 1" />}
-            </Field>
-            <Field label="Petugas" className="sm:col-span-2">
-              {id => <Input id={id} value={form.officerName} onChange={e => set('officerName', e.target.value)} />}
-            </Field>
-          </>
-        ) : null}
-        <Field label="Catatan" className="sm:col-span-2">
-          {id => <Textarea id={id} value={form.note} onChange={e => set('note', e.target.value)} />}
-        </Field>
-      </form>
-    </Modal>
-  );
-}

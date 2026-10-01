@@ -1,19 +1,11 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { useParams } from 'react-router';
-import { CheckCircle2, Download, PencilLine, PlayCircle, XCircle } from 'lucide-react';
-import { useAuth } from '@/auth/AuthContext';
+import { useMemo, useState, type ReactNode } from 'react';
+import { useNavigate, useParams } from 'react-router';
+import { CheckCircle2, Download, Pencil, PencilLine, PlayCircle, Trash2, XCircle } from 'lucide-react';
 import { useSchoolScope } from '@/scope/SchoolScope';
 import { useClasses, useSchoolMutation, useStudents } from '@/hooks/useSchoolData';
-import { updateSessionStatus, upsertImmunizationRecord, upsertMeasurementRecord } from '@/api/school';
-import { errorMessage } from '@/api/errors';
-import type {
-  ImmunizationRecordRow,
-  ImmunizationRecordStatus,
-  ImmunizationSessionRow,
-  MeasurementRecordRow,
-  MeasurementSessionRow,
-  SessionStatus,
-} from '@/api/types';
+import { useDrawerState, useSelection } from '@/hooks/useCrud';
+import { deleteRecord, deleteRecords } from '@/api/crud/records';
+import type { ImmunizationRecordRow, ImmunizationRecordStatus, MeasurementRecordRow, SessionStatus } from '@/api/types';
 import { toMeasurementView, type MeasurementView } from '@/lib/analytics';
 import { formatDate, formatDateTime, formatDecimal, formatNumber, formatPercent } from '@/lib/format';
 import { downloadCsv, slugify } from '@/lib/csv';
@@ -23,14 +15,16 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, FilterSelect, type Column } from '@/components/ui/DataTable';
 import { IMMUNIZATION_STATUS_LABEL, ImmunizationStatusBadge, SessionStatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { ConfirmDialog, Modal } from '@/components/ui/Modal';
-import { Field, FormError, Input, Select, Textarea } from '@/components/ui/Form';
+import { RowActions } from '@/components/ui/RowActions';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { StatCard } from '@/components/ui/StatCard';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
+import { ExportButton } from '@/components/importExport/ExportButton';
 import { KIND_META, useSessionData, type SessionKind } from './SessionsPage';
-
-type AnySession = MeasurementSessionRow & Partial<Pick<ImmunizationSessionRow, 'vaccine_name' | 'dose_label' | 'officer_name'>>;
+import { SessionFormDrawer, type AnySession } from './sessions/SessionFormDrawer';
+import { RecordFormDrawer } from './sessions/RecordFormDrawer';
+import { useSessionActions } from './sessions/useSessionActions';
 
 type RosterRow = {
   studentId: string;
@@ -60,11 +54,14 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
   const students = useStudents();
   const classes = useClasses();
   const [filter, setFilter] = useState('');
-  const [editing, setEditing] = useState<RosterRow | null>(null);
-  const [statusTarget, setStatusTarget] = useState<SessionStatus | null>(null);
-  const statusMutation = useSchoolMutation((status: SessionStatus, role) =>
-    updateSessionStatus(kind, sessionId ?? '', status, role),
-  );
+  const navigate = useNavigate();
+  const confirm = useConfirm();
+  const recordEditor = useDrawerState<RosterRow>();
+  const sessionEditor = useDrawerState<true>();
+  const selection = useSelection();
+  const { askStatus, askDelete } = useSessionActions(kind);
+  const removeRecord = useSchoolMutation((id: string, role) => deleteRecord(kind, id, role));
+  const removeRecords = useSchoolMutation((ids: string[], role) => deleteRecords(kind, sessionId ?? '', ids, role));
 
   const session = ((sessions.data ?? []) as AnySession[]).find(item => item.id === sessionId) ?? null;
   const className = classes.data?.find(item => item.id === session?.class_id)?.name ?? '-';
@@ -144,6 +141,27 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
     return true;
   });
 
+  const recordIdOf = (row: RosterRow) => (kind === 'measurement' ? row.measurement?.record.id : row.immunization?.id) ?? null;
+  const canRecord = can.recordData && session.status !== 'cancelled';
+
+  const askDeleteRecords = (targets: RosterRow[], onDone?: () => void) => {
+    const ids = targets.map(recordIdOf).filter((id): id is string => Boolean(id));
+    if (ids.length === 0) return;
+    const label = targets.length === 1 ? `data ${targets[0].name}` : `${ids.length} data siswa`;
+    void confirm({
+      title: targets.length === 1 ? 'Hapus data siswa?' : `Hapus ${ids.length} data?`,
+      tone: 'danger',
+      confirmLabel: 'Hapus',
+      message: `${label[0].toUpperCase()}${label.slice(1)} di sesi "${session.name}" akan dihapus permanen. Siswa akan kembali berstatus "belum dicatat".`,
+      onConfirm: async () => {
+        if (ids.length === 1) await removeRecord.mutateAsync(ids[0]);
+        else await removeRecords.mutateAsync(ids);
+        toast.success(ids.length === 1 ? 'Data dihapus.' : `${ids.length} data dihapus.`);
+        onDone?.();
+      },
+    });
+  };
+
   const measurementColumns: Column<RosterRow>[] = [
     { key: 'height', header: 'TB (cm)', sortValue: row => row.measurement?.heightCm, cell: row => formatDecimal(row.measurement?.heightCm) },
     { key: 'weight', header: 'BB (kg)', sortValue: row => row.measurement?.weightKg, cell: row => formatDecimal(row.measurement?.weightKg) },
@@ -217,18 +235,34 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
     },
     ...(kind === 'measurement' ? measurementColumns : immunizationColumns),
     { key: 'time', header: 'Dicatat', sortValue: row => row.recordedAt, cell: row => <span className="text-xs">{formatDateTime(row.recordedAt)}</span> },
-    ...(!can.recordData || session.status === 'cancelled'
+    ...(!canRecord && !can.deleteData
       ? []
       : [
           {
             key: 'actions',
             header: '',
-            className: 'text-right',
-            cell: (row: RosterRow) => (
-              <Button variant="ghost" size="sm" icon={<PencilLine className="size-3.5" />} onClick={() => setEditing(row)}>
-                {row.recordedAt ? 'Ubah' : 'Input'}
-              </Button>
-            ),
+            className: 'text-right whitespace-nowrap',
+            cell: (row: RosterRow) =>
+              !row.recordedAt ? (
+                canRecord ? (
+                  <Button variant="ghost" size="sm" icon={<PencilLine className="size-3.5" />} onClick={() => recordEditor.show(row)}>
+                    Input
+                  </Button>
+                ) : null
+              ) : (
+                <RowActions
+                  actions={[
+                    { label: 'Ubah data', icon: <Pencil className="size-4" />, hidden: !canRecord, onSelect: () => recordEditor.show(row) },
+                    {
+                      label: 'Hapus data',
+                      icon: <Trash2 className="size-4" />,
+                      tone: 'danger',
+                      hidden: !can.deleteData,
+                      onSelect: () => askDeleteRecords([row]),
+                    },
+                  ]}
+                />
+              ),
           },
         ]),
   ];
@@ -291,10 +325,31 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
         actions={
           <>
             {statusActions.map(action => (
-              <Button key={action.status} variant={action.variant} size="sm" icon={action.icon} onClick={() => setStatusTarget(action.status)}>
+              <Button key={action.status} variant={action.variant} size="sm" icon={action.icon} onClick={() => void askStatus([session], action.status)}>
                 {action.label}
               </Button>
             ))}
+            {can.manageSessions ? (
+              <Button variant="secondary" size="sm" icon={<Pencil className="size-4" />} onClick={() => sessionEditor.show(true)}>
+                Ubah sesi
+              </Button>
+            ) : null}
+            {can.deleteData ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-danger"
+                icon={<Trash2 className="size-4" />}
+                onClick={() =>
+                  void askDelete([{ id: session.id, name: session.name, recordCount: recorded }], () =>
+                    navigate(`${basePath}/${meta.path}`, { replace: true }),
+                  )
+                }
+              >
+                Hapus sesi
+              </Button>
+            ) : null}
+            <ExportButton kind="session" sessionKind={kind} sessionId={session.id} label="Ekspor Excel" />
             <Button variant="secondary" size="sm" icon={<Download className="size-3.5" />} onClick={exportCsv}>
               Ekspor CSV
             </Button>
@@ -342,6 +397,13 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
           initialPageSize={25}
           initialSort={{ key: 'name', dir: 'asc' }}
           emptyTitle="Belum ada siswa di kelas ini"
+          emptyDescription="Tambahkan atau pindahkan siswa aktif ke kelas sesi ini dari halaman Siswa."
+          selection={can.deleteData ? { ...selection, isSelectable: row => Boolean(row.recordedAt) } : undefined}
+          bulkActions={(selectedRows, clear) => (
+            <Button variant="danger" size="sm" icon={<Trash2 className="size-3.5" />} onClick={() => askDeleteRecords(selectedRows, clear)}>
+              Hapus data
+            </Button>
+          )}
           filters={
             <FilterSelect
               label="Filter"
@@ -363,155 +425,23 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
         />
       </Card>
 
-      {editing ? <RecordModal kind={kind} session={session} row={editing} onClose={() => setEditing(null)} /> : null}
-      <ConfirmDialog
-        open={statusTarget !== null}
-        danger={statusTarget === 'cancelled'}
-        title="Ubah status sesi?"
-        message={
-          statusTarget === 'cancelled'
-            ? 'Sesi yang dibatalkan tidak dihitung dalam statistik ringkasan.'
-            : statusTarget === 'completed'
-              ? 'Sesi akan ditandai selesai. Record yang sudah ada tetap tersimpan.'
-              : 'Sesi akan diaktifkan kembali.'
-        }
-        loading={statusMutation.isPending}
-        onClose={() => setStatusTarget(null)}
-        onConfirm={async () => {
-          if (!statusTarget) return;
-          try {
-            await statusMutation.mutateAsync(statusTarget);
-            toast.success('Status sesi diperbarui.');
-            setStatusTarget(null);
-          } catch (statusError) {
-            toast.error(errorMessage(statusError));
-          }
-        }}
+      <RecordFormDrawer
+        key={`record-${recordEditor.key}`}
+        open={recordEditor.open}
+        kind={kind}
+        session={session}
+        target={recordEditor.target}
+        onClose={recordEditor.close}
+      />
+      <SessionFormDrawer
+        key={`session-${sessionEditor.key}`}
+        open={sessionEditor.open}
+        kind={kind}
+        session={session}
+        recordCount={recorded}
+        onClose={sessionEditor.close}
       />
     </div>
   );
 }
 
-function RecordModal({
-  kind,
-  session,
-  row,
-  onClose,
-}: {
-  kind: SessionKind;
-  session: AnySession;
-  row: RosterRow;
-  onClose: () => void;
-}) {
-  const { userId } = useAuth();
-  const toast = useToast();
-  const m = row.measurement;
-  const i = row.immunization;
-  const [form, setForm] = useState({
-    height: m?.heightCm?.toString() ?? '',
-    weight: m?.weightKg?.toString() ?? '',
-    notes: (kind === 'measurement' ? m?.record.notes : i?.notes) ?? '',
-    status: (i?.status ?? 'given') as ImmunizationRecordStatus,
-    vaccineName: i?.vaccine_name ?? session.vaccine_name ?? '',
-    doseLabel: i?.dose_label ?? session.dose_label ?? '',
-    officerName: i?.officer_name ?? session.officer_name ?? '',
-    batchNumber: i?.batch_number ?? '',
-    injectionSite: i?.injection_site ?? '',
-    adverseEventNotes: i?.adverse_event_notes ?? '',
-  });
-  const [error, setError] = useState<string | null>(null);
-  const set = (key: keyof typeof form, value: string) => setForm(current => ({ ...current, [key]: value }));
-
-  const mutation = useSchoolMutation(async (input: typeof form, role) => {
-    if (!userId) throw new Error('Data user tidak ditemukan. Silakan login ulang.');
-    const base = { sessionId: session.id, studentId: row.studentId, studentEnrollmentId: row.enrollmentId, recordedBy: userId };
-    if (kind === 'measurement') {
-      const parse = (value: string) => (value.trim() ? Number(value.replace(',', '.')) : null);
-      await upsertMeasurementRecord({ ...base, heightCm: parse(input.height), weightKg: parse(input.weight), notes: input.notes }, role);
-    } else {
-      await upsertImmunizationRecord({ ...base, ...input }, role);
-    }
-  });
-
-  const onSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    setError(null);
-    if (kind === 'measurement') {
-      const height = form.height.trim() ? Number(form.height.replace(',', '.')) : null;
-      const weight = form.weight.trim() ? Number(form.weight.replace(',', '.')) : null;
-      if (height === null && weight === null) return setError('Isi minimal tinggi atau berat badan.');
-      // Rentang mengikuti CHECK constraint di measurement_recording_schema.sql
-      if (height !== null && (!Number.isFinite(height) || height < 30 || height > 250)) return setError('Tinggi harus 30–250 cm.');
-      if (weight !== null && (!Number.isFinite(weight) || weight < 1 || weight > 300)) return setError('Berat harus 1–300 kg.');
-    } else if (!form.vaccineName.trim()) {
-      return setError('Jenis imunisasi wajib diisi.');
-    }
-    try {
-      await mutation.mutateAsync(form);
-      toast.success('Data tersimpan.');
-      onClose();
-    } catch (submitError) {
-      setError(errorMessage(submitError));
-    }
-  };
-
-  return (
-    <Modal
-      open
-      title={kind === 'measurement' ? 'Input pengukuran' : 'Input imunisasi'}
-      description={`${row.name} · input manual (sama dengan mode manual di aplikasi mobile)`}
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose} disabled={mutation.isPending}>
-            Batal
-          </Button>
-          <Button type="submit" form="record-form" loading={mutation.isPending}>
-            Simpan
-          </Button>
-        </>
-      }
-    >
-      <form id="record-form" onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <FormError message={error} />
-        </div>
-        {kind === 'measurement' ? (
-          <>
-            <Field label="Tinggi badan (cm)">
-              {id => <Input id={id} inputMode="decimal" value={form.height} onChange={e => set('height', e.target.value)} placeholder="mis. 125.5" />}
-            </Field>
-            <Field label="Berat badan (kg)">
-              {id => <Input id={id} inputMode="decimal" value={form.weight} onChange={e => set('weight', e.target.value)} placeholder="mis. 28.2" />}
-            </Field>
-          </>
-        ) : (
-          <>
-            <Field label="Status *">
-              {id => (
-                <Select id={id} value={form.status} onChange={e => set('status', e.target.value)}>
-                  {(Object.keys(IMMUNIZATION_STATUS_LABEL) as ImmunizationRecordStatus[]).map(status => (
-                    <option key={status} value={status}>
-                      {IMMUNIZATION_STATUS_LABEL[status]}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-            <Field label="Vaksin *">{id => <Input id={id} value={form.vaccineName} onChange={e => set('vaccineName', e.target.value)} />}</Field>
-            <Field label="Dosis">{id => <Input id={id} value={form.doseLabel} onChange={e => set('doseLabel', e.target.value)} />}</Field>
-            <Field label="Petugas">{id => <Input id={id} value={form.officerName} onChange={e => set('officerName', e.target.value)} />}</Field>
-            <Field label="No. batch">{id => <Input id={id} value={form.batchNumber} onChange={e => set('batchNumber', e.target.value)} />}</Field>
-            <Field label="Lokasi suntik">{id => <Input id={id} value={form.injectionSite} onChange={e => set('injectionSite', e.target.value)} />}</Field>
-            <Field label="KIPI (kejadian ikutan pasca imunisasi)" className="sm:col-span-2">
-              {id => <Textarea id={id} value={form.adverseEventNotes} onChange={e => set('adverseEventNotes', e.target.value)} />}
-            </Field>
-          </>
-        )}
-        <Field label="Catatan" className="sm:col-span-2">
-          {id => <Textarea id={id} value={form.notes} onChange={e => set('notes', e.target.value)} />}
-        </Field>
-      </form>
-    </Modal>
-  );
-}

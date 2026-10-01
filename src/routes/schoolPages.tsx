@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Route } from 'react-router';
 import {
+  BarChart3,
   Building2,
   CalendarRange,
   GraduationCap,
@@ -21,6 +22,8 @@ import { AcademicYearsPage } from '@/pages/school/AcademicYearsPage';
 import { SessionsPage } from '@/pages/school/SessionsPage';
 import { SessionDetailPage } from '@/pages/school/SessionDetailPage';
 import { SchoolProfilePage } from '@/pages/school/SchoolProfilePage';
+import { ReportsPage } from '@/pages/school/reports/ReportsPage';
+import { StudentGrowthPage } from '@/pages/school/reports/StudentGrowthPage';
 
 /**
  * Registri tunggal halaman sekolah — dipakai untuk route, menu sidebar (admin & guru) dan
@@ -46,7 +49,13 @@ export type SchoolPageDef = {
 
 export const SCHOOL_PAGES: SchoolPageDef[] = [
   { path: '', label: 'Ringkasan', icon: LayoutDashboard, element: <OverviewPage /> },
-  { path: 'siswa', label: 'Siswa', icon: Users, element: <StudentsPage /> },
+  {
+    path: 'siswa',
+    label: 'Siswa',
+    icon: Users,
+    element: <StudentsPage />,
+    children: [{ path: 'siswa/:studentId', element: <StudentGrowthPage /> }],
+  },
   { path: 'kelas', label: 'Kelas', icon: School, element: <ClassesPage /> },
   { path: 'guru', label: 'Guru', icon: GraduationCap, element: <TeachersPage />, visible: can => can.viewTeachers },
   {
@@ -72,6 +81,7 @@ export const SCHOOL_PAGES: SchoolPageDef[] = [
     element: <SessionsPage kind="immunization" />,
     children: [{ path: 'imunisasi/:sessionId', element: <SessionDetailPage kind="immunization" /> }],
   },
+  { path: 'laporan', label: 'Laporan', icon: BarChart3, element: <ReportsPage /> },
   { path: 'profil', label: 'Profil Sekolah', tabLabel: 'Profil', icon: Building2, element: <SchoolProfilePage /> },
 ];
 
