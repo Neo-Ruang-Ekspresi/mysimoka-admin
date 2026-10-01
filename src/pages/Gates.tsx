@@ -41,7 +41,9 @@ export function RootRedirect() {
 }
 
 export function NoAccessPage() {
-  const { logout, displayName, roles } = useAuth();
+  const { logout, displayName, roles, canSchoolAdmin, canSuperAdmin } = useAuth();
+  // Login ulang dengan akun lain kembali ke halaman ini (state `from`); kirim ke dashboard bila kini berhak.
+  if (canSchoolAdmin || canSuperAdmin) return <Navigate to="/" replace />;
   return (
     <FullPage>
       <div className="w-full max-w-md rounded-2xl border border-line bg-card p-6 text-center">
