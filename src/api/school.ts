@@ -77,16 +77,19 @@ export async function fetchSchool(schoolId: string, role: string): Promise<Schoo
 }
 
 /**
- * Profil sekolah tanpa `join_code` — untuk role `teacher` (permission select guru pada
- * `schools` tidak membuka join_code).
+ * Profil sekolah untuk role `teacher`. Select guru pada `schools` hanya membuka
+ * id, name, number, address, join_code, created_at; join_code sengaja tidak ditampilkan.
  */
 export async function fetchSchoolBasic(schoolId: string, role: string): Promise<SchoolRow | null> {
-  const data = await gql<{ schools_by_pk: Omit<SchoolRow, 'join_code'> | null }>(
-    `query SchoolProfileBasic($schoolId: uuid!) { schools_by_pk(id: $schoolId) { id name number address created_by created_at updated_at } }`,
+  const data = await gql<{
+    schools_by_pk: Pick<SchoolRow, 'id' | 'name' | 'number' | 'address' | 'created_at'> | null;
+  }>(
+    `query SchoolProfileBasic($schoolId: uuid!) { schools_by_pk(id: $schoolId) { id name number address created_at } }`,
     { schoolId },
     { role },
   );
-  return data.schools_by_pk ? { ...data.schools_by_pk, join_code: null } : null;
+  const school = data.schools_by_pk;
+  return school ? { ...school, join_code: null, created_by: null, updated_at: school.created_at } : null;
 }
 
 export async function fetchClasses(schoolId: string, role: string): Promise<ClassRow[]> {
