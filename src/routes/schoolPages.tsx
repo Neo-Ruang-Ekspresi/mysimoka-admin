@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Route } from 'react-router';
 import {
   BarChart3,
+  Bluetooth,
   Building2,
   CalendarRange,
   GraduationCap,
@@ -22,6 +23,7 @@ import { AcademicYearsPage } from '@/pages/school/AcademicYearsPage';
 import { SessionsPage } from '@/pages/school/SessionsPage';
 import { SessionDetailPage } from '@/pages/school/SessionDetailPage';
 import { SchoolProfilePage } from '@/pages/school/SchoolProfilePage';
+import { DevicesPage } from '@/pages/school/DevicesPage';
 import { ReportsPage } from '@/pages/school/reports/ReportsPage';
 import { StudentGrowthPage } from '@/pages/school/reports/StudentGrowthPage';
 
@@ -81,6 +83,7 @@ export const SCHOOL_PAGES: SchoolPageDef[] = [
     element: <SessionsPage kind="immunization" />,
     children: [{ path: 'imunisasi/:sessionId', element: <SessionDetailPage kind="immunization" /> }],
   },
+  { path: 'perangkat', label: 'Perangkat', icon: Bluetooth, element: <DevicesPage /> },
   { path: 'laporan', label: 'Laporan', icon: BarChart3, element: <ReportsPage /> },
   { path: 'profil', label: 'Profil Sekolah', tabLabel: 'Profil', icon: Building2, element: <SchoolProfilePage /> },
 ];

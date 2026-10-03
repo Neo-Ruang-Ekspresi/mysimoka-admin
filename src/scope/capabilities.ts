@@ -37,6 +37,8 @@ export type SchoolCapabilities = {
   importData: boolean;
   /** Ekspor/unduh data & laporan. */
   exportData: boolean;
+  /** Ubah nama, aktifkan/nonaktifkan & hapus perangkat BLE sekolah. */
+  manageDevices: boolean;
 };
 
 const NONE: SchoolCapabilities = {
@@ -54,6 +56,7 @@ const NONE: SchoolCapabilities = {
   deleteData: false,
   importData: false,
   exportData: false,
+  manageDevices: false,
 };
 
 export const CAPABILITIES: Record<SchoolMode, SchoolCapabilities> = {

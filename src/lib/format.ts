@@ -81,3 +81,25 @@ export function initials(name: string | null | undefined): string {
     .join('')
     .toUpperCase();
 }
+
+const relativeFormatter = new Intl.RelativeTimeFormat('id-ID', { numeric: 'auto' });
+const RELATIVE_UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+  ['year', 365 * 86_400],
+  ['month', 30 * 86_400],
+  ['week', 7 * 86_400],
+  ['day', 86_400],
+  ['hour', 3_600],
+  ['minute', 60],
+];
+
+/** Waktu relatif id-ID ("3 hari yang lalu", "baru saja"). */
+export function formatRelative(value: string | null | undefined, now: number = Date.now()): string {
+  const date = parseDate(value);
+  if (!date) return '-';
+  const seconds = Math.round((date.getTime() - now) / 1000);
+  if (Math.abs(seconds) < 60) return 'baru saja';
+  for (const [unit, size] of RELATIVE_UNITS) {
+    if (Math.abs(seconds) >= size) return relativeFormatter.format(Math.round(seconds / size), unit);
+  }
+  return 'baru saja';
+}
