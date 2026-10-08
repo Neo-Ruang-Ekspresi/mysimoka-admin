@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSchoolScope } from '@/scope/SchoolScope';
 import {
+  fetchCalibrationExtras,
   fetchCalibrationSettings,
   fetchCalibrations,
   type CalibrationRow,
@@ -59,4 +60,16 @@ export function useCalibrations() {
     isLoading: history.isLoading || settings.isLoading,
     error: history.error ?? settings.error,
   };
+}
+
+/**
+ * Interval cek ulang + status PIN teknisi (kolom tambahan; aman bila belum di-deploy).
+ * Dipakai kartu toleransi dan badge Akurasi; react-query membagi satu request.
+ */
+export function useCalibrationExtras() {
+  const { schoolId, role } = useSchoolScope();
+  return useQuery({
+    queryKey: ['school', schoolId, role, 'calibration-extras'],
+    queryFn: () => fetchCalibrationExtras(schoolId, role),
+  });
 }

@@ -43,6 +43,8 @@ export type SchoolCapabilities = {
   manageCalibrationSettings: boolean;
   /** Ubah batas toleransi global (bawaan semua sekolah). */
   manageGlobalCalibrationSettings: boolean;
+  /** Lihat Laporan Uji Alat (validasi perangkat terhadap acuan bersertifikat). */
+  viewDeviceValidation: boolean;
 };
 
 const NONE: SchoolCapabilities = {
@@ -63,6 +65,7 @@ const NONE: SchoolCapabilities = {
   manageDevices: false,
   manageCalibrationSettings: false,
   manageGlobalCalibrationSettings: false,
+  viewDeviceValidation: false,
 };
 
 export const CAPABILITIES: Record<SchoolMode, SchoolCapabilities> = {
@@ -72,7 +75,7 @@ export const CAPABILITIES: Record<SchoolMode, SchoolCapabilities> = {
     manageGlobalCalibrationSettings: false,
   },
   // Superadmin drill-down: read-only + ekspor (+ batas toleransi global).
-  super: { ...NONE, viewJoinCode: true, viewTeachers: true, exportData: true, manageGlobalCalibrationSettings: true },
+  super: { ...NONE, viewJoinCode: true, viewTeachers: true, exportData: true, manageGlobalCalibrationSettings: true, viewDeviceValidation: true },
   // Guru: lihat kelas/siswa, buat sesi & catat data, ekspor.
   teacher: { ...NONE, createSessions: true, recordData: true, exportData: true },
 };

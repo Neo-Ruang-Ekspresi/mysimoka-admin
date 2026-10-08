@@ -5,6 +5,7 @@ import {
   Bluetooth,
   Building2,
   CalendarRange,
+  ClipboardCheck,
   GraduationCap,
   LayoutDashboard,
   Ruler,
@@ -24,6 +25,7 @@ import { SessionsPage } from '@/pages/school/SessionsPage';
 import { SessionDetailPage } from '@/pages/school/SessionDetailPage';
 import { SchoolProfilePage } from '@/pages/school/SchoolProfilePage';
 import { DevicesPage } from '@/pages/school/DevicesPage';
+import { DeviceValidationPage } from '@/pages/school/DeviceValidationPage';
 import { ReportsPage } from '@/pages/school/reports/ReportsPage';
 import { StudentGrowthPage } from '@/pages/school/reports/StudentGrowthPage';
 
@@ -84,6 +86,15 @@ export const SCHOOL_PAGES: SchoolPageDef[] = [
     children: [{ path: 'imunisasi/:sessionId', element: <SessionDetailPage kind="immunization" /> }],
   },
   { path: 'perangkat', label: 'Perangkat', icon: Bluetooth, element: <DevicesPage /> },
+  {
+    // Dibuka dari halaman Perangkat (riwayat akurasi). Tidak di menu.
+    path: 'perangkat/laporan-uji',
+    label: 'Laporan Uji Alat',
+    icon: ClipboardCheck,
+    element: <DeviceValidationPage />,
+    visible: can => can.viewDeviceValidation,
+    inNav: false,
+  },
   { path: 'laporan', label: 'Laporan', icon: BarChart3, element: <ReportsPage /> },
   { path: 'profil', label: 'Profil Sekolah', tabLabel: 'Profil', icon: Building2, element: <SchoolProfilePage /> },
 ];

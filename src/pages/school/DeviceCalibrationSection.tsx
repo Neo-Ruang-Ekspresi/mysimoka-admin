@@ -1,13 +1,26 @@
 import { useState } from 'react';
-import { Gauge, Pencil, TrendingDown, TrendingUp } from 'lucide-react';
+import { Gauge, KeyRound, Pencil, TrendingDown, TrendingUp } from 'lucide-react';
 import { useSchoolScope } from '@/scope/SchoolScope';
 import { useSchoolMutation } from '@/hooks/useSchoolData';
-import { calibrationsForDevice, latestChecks, type CheckSummary } from '@/hooks/useCalibrations';
+import {
+  calibrationsForDevice,
+  latestChecks,
+  useCalibrationExtras,
+  useCalibrations,
+  type CheckSummary,
+} from '@/hooks/useCalibrations';
 import {
   CALIBRATION_KIND_LABEL,
+  DEFAULT_RECALIBRATION_INTERVAL_DAYS,
+  TECHNICIAN_PIN_PATTERN,
+  deviceCalibrationState,
   saveGlobalTolerances,
+  saveRecalibrationInterval,
   saveSchoolTolerances,
+  saveTechnicianPin,
+  type CalibrationExtras,
   type CalibrationKind,
+  type SettingsTarget,
   type CalibrationRow,
   type CalibrationSettings,
   type CalibrationsResult,
@@ -23,6 +36,8 @@ import { Modal } from '@/components/ui/Modal';
 import { Field, FormError, Input } from '@/components/ui/Form';
 import { EmptyState } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { DeviceValidationLink } from './DeviceValidationLink';
 
 // Read-only riwayat cek akurasi/kalibrasi per perangkat + batas toleransi (sekolah/global).
 
@@ -51,18 +66,26 @@ function kindLabel(kind: string) {
 
 /** Badge ringkas untuk kolom tabel perangkat: bias cek terakhir (berat, lalu tinggi). */
 export function DeviceAccuracyBadge({ rows, device, onOpen }: { rows: CalibrationRow[]; device: DeviceRow; onOpen: () => void }) {
-  const summaries = latestChecks(calibrationsForDevice(rows, device));
+  // Kedua hook memakai query yang sama dengan halaman (react-query: satu request).
+  const { history } = useCalibrations();
+  const extras = useCalibrationExtras();
+  const deviceRows = calibrationsForDevice(rows, device);
+  const summaries = latestChecks(deviceRows);
   if (summaries.length === 0) {
-    return rows.length === 0 ? (
+    // Riwayat tidak terbaca (belum di-deploy / tanpa akses): jangan klaim "belum dikalibrasi".
+    return history?.status !== 'ok' ? (
       <span className="text-xs text-fg-subtle">-</span>
     ) : (
-      <button type="button" onClick={onOpen} className="text-xs text-fg-subtle underline-offset-2 hover:underline">
-        Belum dicek
+      <button type="button" onClick={onOpen} className="text-left">
+        <Badge tone="warning">Belum dikalibrasi</Badge>
       </button>
     );
   }
+  const state = deviceCalibrationState(deviceRows, extras.data?.intervalDays ?? DEFAULT_RECALIBRATION_INTERVAL_DAYS);
   return (
     <button type="button" onClick={onOpen} className="flex flex-col items-start gap-1 text-left">
+      {state === 'stale' ? <Badge tone="warning">Perlu cek ulang</Badge> : null}
+      {state === 'out_of_tolerance' ? <Badge tone="danger">Di luar toleransi</Badge> : null}
       {summaries.map(({ measure, latest }) => (
         <Badge key={measure} tone={latest.within_tolerance ? 'success' : 'warning'}>
           {measure === 'weight' ? 'Berat' : 'Tinggi'} {signed(latest.bias, digits(measure))} {unit(measure)}
@@ -122,7 +145,7 @@ export function DeviceCalibrationHistoryModal({
   const deviceRows = device ? calibrationsForDevice(rows, device) : [];
   const summaries = latestChecks(deviceRows);
   return (
-    <Modal open={open} title={`Akurasi & kalibrasi — ${title}`} description="Dicatat otomatis oleh aplikasi MySimoka." onClose={onClose} size="xl">
+    <Modal open={open} title={`Akurasi & kalibrasi — ${title}`} description="Dicatat otomatis oleh aplikasi MySimoka." onClose={onClose} size="xl" footer={<DeviceValidationLink deviceId={device?.id} />}>
       {deviceRows.length === 0 ? (
         <EmptyState
           icon={<Gauge className="size-6" />}
@@ -212,10 +235,17 @@ export function CalibrationSettingsCard({
 }) {
   const { can } = useSchoolScope();
   const [editing, setEditing] = useState(false);
+  const extrasQuery = useCalibrationExtras();
   if (!settings) return null;
   const target = can.manageGlobalCalibrationSettings ? 'global' : can.manageCalibrationSettings ? 'school' : null;
   const { effective } = settings;
   const editable = target !== null && settings.available && history?.status !== 'unavailable';
+  const extras = extrasQuery.data?.available ? extrasQuery.data : null;
+  const intervalForTarget = extras
+    ? target === 'global'
+      ? extras.globalRow?.recalibration_interval_days ?? DEFAULT_RECALIBRATION_INTERVAL_DAYS
+      : extras.intervalDays
+    : null;
 
   return (
     <Card>
@@ -237,13 +267,26 @@ export function CalibrationSettingsCard({
         <p>
           Tinggi: <span className="font-semibold">±{fixed(effective.heightCm, 1)} cm</span>
         </p>
+        {extras ? (
+          <p>
+            Cek ulang tiap: <span className="font-semibold">{extras.intervalDays} hari</span>
+          </p>
+        ) : null}
         {!settings.available ? <p className="text-xs text-fg-subtle">Pengaturan belum tersedia di server; memakai bawaan.</p> : null}
       </div>
+      {extras ? (
+        <TechnicianPinSection
+          extras={extras}
+          target={editable ? target : null}
+          base={{ weightKg: effective.weightKg, heightCm: effective.heightCm }}
+        />
+      ) : null}
       {target ? (
         <ToleranceDrawer
           key={editing ? 'open' : 'closed'}
           open={editing}
           target={target}
+          interval={intervalForTarget}
           initial={
             target === 'global'
               ? settings.globalRow
@@ -266,11 +309,14 @@ function parsePositive(text: string): number | null {
 function ToleranceDrawer({
   open,
   target,
+  interval,
   initial,
   onClose,
 }: {
   open: boolean;
   target: 'school' | 'global';
+  /** Interval cek ulang sekarang (hari); null = kolom belum ada di server (field disembunyikan). */
+  interval: number | null;
   initial: { weightKg: number; heightCm: number };
   onClose: () => void;
 }) {
@@ -278,9 +324,19 @@ function ToleranceDrawer({
   const toast = useToast();
   const [weight, setWeight] = useState(String(initial.weightKg));
   const [height, setHeight] = useState(String(initial.heightCm));
+  const [intervalText, setIntervalText] = useState(interval !== null ? String(interval) : '');
   const [error, setError] = useState<string | null>(null);
-  const mutation = useSchoolMutation((input: { weightKg: number; heightCm: number }, role) =>
-    target === 'global' ? saveGlobalTolerances(input, role) : saveSchoolTolerances(schoolId, input, role),
+  const mutation = useSchoolMutation(
+    async (input: { weightKg: number; heightCm: number; intervalDays: number | null }, role) => {
+      const tolerances = { weightKg: input.weightKg, heightCm: input.heightCm };
+      if (target === 'global') await saveGlobalTolerances(tolerances, role);
+      else await saveSchoolTolerances(schoolId, tolerances, role);
+      if (input.intervalDays !== null && input.intervalDays !== interval) {
+        const where: SettingsTarget =
+          target === 'global' ? { target: 'global' } : { target: 'school', schoolId, base: tolerances };
+        await saveRecalibrationInterval(where, input.intervalDays, role);
+      }
+    },
   );
 
   const onSubmit = async () => {
@@ -291,8 +347,16 @@ function ToleranceDrawer({
       setError('Isi angka lebih dari 0 (berat maks. 5 kg, tinggi maks. 10 cm).');
       return;
     }
+    let intervalDays: number | null = null;
+    if (interval !== null) {
+      intervalDays = Number(intervalText.trim());
+      if (!Number.isInteger(intervalDays) || intervalDays < 1 || intervalDays > 3650) {
+        setError('Interval cek ulang berupa bilangan bulat 1–3650 hari.');
+        return;
+      }
+    }
     try {
-      await mutation.mutateAsync({ weightKg, heightCm });
+      await mutation.mutateAsync({ weightKg, heightCm, intervalDays });
       toast.success('Batas toleransi disimpan.');
       onClose();
     } catch (submitError) {
@@ -330,10 +394,183 @@ function ToleranceDrawer({
         <Field label="Toleransi tinggi (cm)" hint="Mis. 0,5.">
           {id => <Input id={id} inputMode="decimal" value={height} onChange={e => setHeight(e.target.value)} />}
         </Field>
+        {interval !== null ? (
+          <Field
+            label="Cek ulang tiap (hari)"
+            hint="Aplikasi memperingatkan petugas bila cek akurasi terakhir alat lebih lama dari ini. Bawaan 180 (6 bulan)."
+          >
+            {id => <Input id={id} inputMode="numeric" value={intervalText} onChange={e => setIntervalText(e.target.value)} />}
+          </Field>
+        ) : null}
         <p className="text-xs text-fg-subtle">
           Hasil cek lama tetap memakai batas yang berlaku saat cek dilakukan (tersimpan di tiap hasil).
         </p>
       </div>
     </Drawer>
+  );
+}
+
+const PIN_SOURCE_LABEL = { school: 'PIN sekolah ini', global: 'PIN global' } as const;
+
+/**
+ * PIN "Mode teknisi" di app (tekan lama judul Perangkat). PIN tidak pernah ditampilkan:
+ * hanya status sudah/belum diatur. Hash dihitung di browser (WebCrypto).
+ */
+function TechnicianPinSection({
+  extras,
+  target,
+  base,
+}: {
+  extras: CalibrationExtras;
+  target: 'school' | 'global' | null;
+  base: { weightKg: number; heightCm: number };
+}) {
+  const { schoolId } = useSchoolScope();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [editing, setEditing] = useState(false);
+  const where: SettingsTarget | null =
+    target === 'global' ? { target: 'global' } : target === 'school' ? { target: 'school', schoolId, base } : null;
+  const clear = useSchoolMutation((_: void, role) => saveTechnicianPin(where!, null, role));
+  const ownHasPin = target === 'global' ? !!extras.globalRow?.hasPin : target === 'school' ? !!extras.schoolRow?.hasPin : false;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-4 text-sm">
+      <div className="flex items-start gap-2">
+        <KeyRound className="mt-0.5 size-4 text-fg-subtle" />
+        <div>
+          <p>
+            PIN teknisi:{' '}
+            {extras.pinSource ? (
+              <Badge tone="success">PIN sudah diatur ({PIN_SOURCE_LABEL[extras.pinSource]})</Badge>
+            ) : (
+              <Badge tone="warning">PIN belum diatur</Badge>
+            )}
+          </p>
+          <p className="mt-1 text-xs text-fg-subtle">
+            Membuka menu Cek akurasi & kalibrasi di aplikasi (tekan lama judul "Perangkat" ±1,5 detik). Hanya untuk tim
+            teknis; petugas biasa tidak melihat menu ini. PIN sekolah menggantikan PIN global.
+          </p>
+        </div>
+      </div>
+      {where ? (
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+            {ownHasPin ? 'Ubah PIN' : target === 'global' ? 'Atur PIN global' : 'Atur PIN sekolah'}
+          </Button>
+          {ownHasPin ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() =>
+                void confirm({
+                  title: target === 'global' ? 'Hapus PIN teknisi global?' : 'Hapus PIN teknisi sekolah?',
+                  tone: 'danger',
+                  confirmLabel: 'Hapus PIN',
+                  message:
+                    target === 'global'
+                      ? 'Sekolah tanpa PIN sendiri tidak bisa membuka Mode teknisi sampai PIN diatur lagi.'
+                      : extras.globalRow?.hasPin
+                        ? 'Aplikasi akan memakai PIN global untuk sekolah ini.'
+                        : 'Belum ada PIN global, jadi Mode teknisi tidak bisa dibuka sampai PIN diatur lagi.',
+                  onConfirm: async () => {
+                    await clear.mutateAsync();
+                    toast.success('PIN teknisi dihapus.');
+                  },
+                })
+              }
+            >
+              Hapus PIN
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {where ? (
+        <TechnicianPinModal key={editing ? 'open' : 'closed'} open={editing} where={where} onClose={() => setEditing(false)} />
+      ) : null}
+    </div>
+  );
+}
+
+function TechnicianPinModal({ open, where, onClose }: { open: boolean; where: SettingsTarget; onClose: () => void }) {
+  const toast = useToast();
+  const [pin, setPin] = useState('');
+  const [repeat, setRepeat] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const mutation = useSchoolMutation((value: string, role) => saveTechnicianPin(where, value, role));
+
+  const onSubmit = async () => {
+    setError(null);
+    if (!TECHNICIAN_PIN_PATTERN.test(pin)) {
+      setError('PIN harus 4–8 angka.');
+      return;
+    }
+    if (pin !== repeat) {
+      setError('Ulangi PIN tidak sama.');
+      return;
+    }
+    try {
+      await mutation.mutateAsync(pin);
+      toast.success('PIN teknisi disimpan.');
+      onClose();
+    } catch (submitError) {
+      setError(errorMessage(submitError));
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      title={where.target === 'global' ? 'PIN teknisi global' : 'PIN teknisi sekolah'}
+      description="PIN 4–8 angka. Disimpan sebagai hash, tidak bisa dilihat lagi; bagikan hanya ke tim teknis."
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={mutation.isPending}>
+            Batal
+          </Button>
+          <Button loading={mutation.isPending} onClick={() => void onSubmit()}>
+            Simpan PIN
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={event => {
+          event.preventDefault();
+          void onSubmit();
+        }}
+      >
+        <FormError message={error} />
+        <Field label="PIN baru">
+          {id => (
+            <Input
+              id={id}
+              type="password"
+              inputMode="numeric"
+              autoComplete="new-password"
+              maxLength={8}
+              value={pin}
+              onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
+            />
+          )}
+        </Field>
+        <Field label="Ulangi PIN">
+          {id => (
+            <Input
+              id={id}
+              type="password"
+              inputMode="numeric"
+              autoComplete="new-password"
+              maxLength={8}
+              value={repeat}
+              onChange={e => setRepeat(e.target.value.replace(/\D/g, ''))}
+            />
+          )}
+        </Field>
+        <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
+      </form>
+    </Modal>
   );
 }

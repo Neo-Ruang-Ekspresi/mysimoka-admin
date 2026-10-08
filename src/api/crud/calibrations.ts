@@ -231,3 +231,171 @@ export async function saveGlobalTolerances(input: ToleranceInput, role: string):
     { role },
   );
 }
+
+// ---------------------------------------------------------------------------
+// Kolom tambahan calibration_settings: interval cek ulang + PIN "Mode teknisi".
+// Query terpisah agar kartu toleransi tetap jalan di server yang belum punya kolom ini.
+// ---------------------------------------------------------------------------
+
+/** Hari setelah cek akurasi terakhir sebelum app menampilkan "minta cek ulang" (sama dengan app). */
+export const DEFAULT_RECALIBRATION_INTERVAL_DAYS = 180;
+
+export type CalibrationExtrasRow = {
+  school_id: string | null;
+  recalibration_interval_days: number | null;
+  /** Hanya dipakai untuk tahu "sudah diatur"; hash tidak pernah ditampilkan. */
+  hasPin: boolean;
+};
+
+export type CalibrationExtras = {
+  available: boolean;
+  schoolRow: CalibrationExtrasRow | null;
+  globalRow: CalibrationExtrasRow | null;
+  /** Interval yang dipakai app untuk sekolah ini: sekolah → global → bawaan. */
+  intervalDays: number;
+  intervalSource: 'school' | 'global' | 'default';
+  /** PIN yang dipakai app: sekolah → global; null = belum diatur. */
+  pinSource: 'school' | 'global' | null;
+};
+
+export async function fetchCalibrationExtras(schoolId: string, role: string): Promise<CalibrationExtras> {
+  let rows: CalibrationExtrasRow[] = [];
+  let available = true;
+  try {
+    const data = await gql<{
+      calibration_settings: Array<{
+        school_id: string | null;
+        recalibration_interval_days: number | string | null;
+        technician_pin_hash: string | null;
+      }>;
+    }>(
+      `query CalibrationExtras($schoolId: uuid!) {
+        calibration_settings(where: { _or: [{ school_id: { _eq: $schoolId } }, { school_id: { _is_null: true } }] }) {
+          school_id recalibration_interval_days technician_pin_hash
+        }
+      }`,
+      { schoolId },
+      { role },
+    );
+    rows = data.calibration_settings.map(row => ({
+      school_id: row.school_id,
+      recalibration_interval_days: toNumber(row.recalibration_interval_days),
+      hasPin: typeof row.technician_pin_hash === 'string' && row.technician_pin_hash.trim() !== '',
+    }));
+  } catch (error) {
+    if (!(error instanceof PermissionError)) throw error;
+    available = false;
+  }
+  const schoolRow = rows.find(row => row.school_id === schoolId) ?? null;
+  const globalRow = rows.find(row => row.school_id === null) ?? null;
+  const intervalRow = schoolRow ?? globalRow;
+  const interval = intervalRow?.recalibration_interval_days ?? null;
+  return {
+    available,
+    schoolRow,
+    globalRow,
+    intervalDays: interval !== null && interval > 0 ? interval : DEFAULT_RECALIBRATION_INTERVAL_DAYS,
+    intervalSource: intervalRow && interval !== null ? (schoolRow ? 'school' : 'global') : 'default',
+    pinSource: schoolRow?.hasPin ? 'school' : globalRow?.hasPin ? 'global' : null,
+  };
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** hex SHA-256 dari `salt + ":" + pin` (WebCrypto), salt acak 16 byte hex. Rumus sama dengan app. */
+export async function hashTechnicianPin(pin: string, salt?: string): Promise<{ hash: string; salt: string }> {
+  const usedSalt = salt ?? bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${usedSalt}:${pin}`));
+  return { hash: bytesToHex(new Uint8Array(digest)), salt: usedSalt };
+}
+
+export const TECHNICIAN_PIN_PATTERN = /^\d{4,8}$/;
+
+export type SettingsTarget = { target: 'global' } | { target: 'school'; schoolId: string; base: ToleranceInput };
+
+/**
+ * Ubah sebagian kolom satu baris calibration_settings. Baris sekolah dibuat bila belum ada
+ * (batas toleransi diisi `base` = nilai yang berlaku sekarang, supaya tidak berubah); pada
+ * baris yang sudah ada hanya `values` (+ updated_by) yang diubah.
+ */
+async function patchSettingsRow(where: SettingsTarget, values: Record<string, unknown>, role: string): Promise<void> {
+  const set = { ...values, updated_by: currentUserId() };
+  if (where.target === 'school') {
+    const data = await gql<{ insert_calibration_settings_one: { id: string } | null }>(
+      `mutation PatchSchoolCalibrationSettings(
+        $object: calibration_settings_insert_input!
+        $columns: [calibration_settings_update_column!]!
+      ) {
+        insert_calibration_settings_one(
+          object: $object
+          on_conflict: { constraint: calibration_settings_school_id_key, update_columns: $columns }
+        ) { id }
+      }`,
+      {
+        object: {
+          school_id: where.schoolId,
+          weight_tolerance_kg: where.base.weightKg,
+          height_tolerance_cm: where.base.heightCm,
+          ...set,
+        },
+        columns: Object.keys(set),
+      },
+      { role },
+    );
+    if (!data.insert_calibration_settings_one?.id) throw new ApiError('Pengaturan tidak dapat disimpan.');
+    return;
+  }
+  const data = await gql<{ update_calibration_settings: { affected_rows: number } }>(
+    `mutation PatchGlobalCalibrationSettings($set: calibration_settings_set_input!) {
+      update_calibration_settings(where: { school_id: { _is_null: true } }, _set: $set) { affected_rows }
+    }`,
+    { set },
+    { role },
+  );
+  if (data.update_calibration_settings.affected_rows > 0) return;
+  await gql(
+    `mutation InsertGlobalCalibrationSettings($object: calibration_settings_insert_input!) {
+      insert_calibration_settings_one(object: $object) { id }
+    }`,
+    { object: { school_id: null, ...set } },
+    { role },
+  );
+}
+
+/** Atur/ubah PIN teknisi (`pin`) atau hapus (`null`). PIN tidak pernah dikirim/disimpan polos. */
+export async function saveTechnicianPin(where: SettingsTarget, pin: string | null, role: string): Promise<void> {
+  if (pin !== null && !TECHNICIAN_PIN_PATTERN.test(pin)) throw new ApiError('PIN harus 4–8 angka.');
+  const values =
+    pin === null
+      ? { technician_pin_hash: null, technician_pin_salt: null }
+      : await hashTechnicianPin(pin).then(({ hash, salt }) => ({ technician_pin_hash: hash, technician_pin_salt: salt }));
+  await patchSettingsRow(where, values, role);
+}
+
+/** Interval cek ulang (hari). */
+export async function saveRecalibrationInterval(where: SettingsTarget, days: number, role: string): Promise<void> {
+  if (!Number.isInteger(days) || days <= 0) throw new ApiError('Interval harus bilangan bulat lebih dari 0.');
+  await patchSettingsRow(where, { recalibration_interval_days: days }, role);
+}
+
+export type DeviceCalibrationState = 'never' | 'out_of_tolerance' | 'stale' | 'ok';
+
+/**
+ * Status untuk staf (sama dengan app): belum pernah dicek, cek terakhir (per ukuran) di luar
+ * toleransi, atau cek terakhir lebih lama dari interval. `rows` milik satu perangkat.
+ */
+export function deviceCalibrationState(rows: CalibrationRow[], intervalDays: number, now = Date.now()): DeviceCalibrationState {
+  const checks = rows
+    .filter(row => row.kind === 'check' && (row.measure === 'weight' || row.measure === 'height'))
+    .map(row => ({ row, time: new Date(row.created_at).getTime() }))
+    .filter(item => Number.isFinite(item.time))
+    .sort((a, b) => b.time - a.time);
+  if (checks.length === 0) return 'never';
+  for (const measure of ['weight', 'height'] as const) {
+    const latest = checks.find(item => item.row.measure === measure);
+    if (latest && latest.row.within_tolerance === false) return 'out_of_tolerance';
+  }
+  return now - checks[0].time > intervalDays * 86_400_000 ? 'stale' : 'ok';
+}
