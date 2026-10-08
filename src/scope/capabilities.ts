@@ -39,6 +39,10 @@ export type SchoolCapabilities = {
   exportData: boolean;
   /** Ubah nama, aktifkan/nonaktifkan & hapus perangkat BLE sekolah. */
   manageDevices: boolean;
+  /** Ubah batas toleransi cek akurasi alat untuk sekolah ini. */
+  manageCalibrationSettings: boolean;
+  /** Ubah batas toleransi global (bawaan semua sekolah). */
+  manageGlobalCalibrationSettings: boolean;
 };
 
 const NONE: SchoolCapabilities = {
@@ -57,13 +61,18 @@ const NONE: SchoolCapabilities = {
   importData: false,
   exportData: false,
   manageDevices: false,
+  manageCalibrationSettings: false,
+  manageGlobalCalibrationSettings: false,
 };
 
 export const CAPABILITIES: Record<SchoolMode, SchoolCapabilities> = {
   // Admin sekolah: semua.
-  school: Object.fromEntries(Object.keys(NONE).map(key => [key, true])) as SchoolCapabilities,
-  // Superadmin drill-down: read-only + ekspor.
-  super: { ...NONE, viewJoinCode: true, viewTeachers: true, exportData: true },
+  school: {
+    ...(Object.fromEntries(Object.keys(NONE).map(key => [key, true])) as SchoolCapabilities),
+    manageGlobalCalibrationSettings: false,
+  },
+  // Superadmin drill-down: read-only + ekspor (+ batas toleransi global).
+  super: { ...NONE, viewJoinCode: true, viewTeachers: true, exportData: true, manageGlobalCalibrationSettings: true },
   // Guru: lihat kelas/siswa, buat sesi & catat data, ekspor.
   teacher: { ...NONE, createSessions: true, recordData: true, exportData: true },
 };

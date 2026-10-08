@@ -86,6 +86,8 @@ Ringkas, wajib diikuti agar pekerjaan paralel (CRUD, impor/ekspor, grafik/lapora
 | importData            | ✓ | – | – |
 | exportData            | ✓ | ✓ | ✓ |
 | manageDevices         | ✓ | – | – |
+| manageCalibrationSettings | ✓ | – | – |
+| manageGlobalCalibrationSettings | – | – | ✓ |
 
 Kapabilitas baru: tambah field di `SchoolCapabilities` + isi ketiga mode di `CAPABILITIES`.
 Mode guru bisa saja ditolak Hasura untuk data tertentu → tangani `PermissionError` dengan degradasi halus

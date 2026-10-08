@@ -43,6 +43,8 @@ import { FadeIn } from '@/components/ui/Animated';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { MenuButton } from '@/components/importExport/MenuButton';
+import { useCalibrations } from '@/hooks/useCalibrations';
+import { CalibrationSettingsCard, DeviceAccuracyBadge, DeviceCalibrationHistoryModal } from './DeviceCalibrationSection';
 
 const LOW_BATTERY = 20;
 const UNREGISTERED_LABEL = 'Belum terdaftar (dari data pengukuran)';
@@ -71,6 +73,8 @@ export function DevicesPage() {
   const toggle = useSchoolMutation((input: { id: string; active: boolean }, role) => setDeviceActive(input.id, input.active, role));
   const remove = useSchoolMutation((id: string, role) => deleteDevice(id, role));
   const canManage = can.manageDevices && registry?.status === 'ok';
+  const calibrations = useCalibrations();
+  const [historyFor, setHistoryFor] = useState<{ device: DeviceRow; title: string } | null>(null);
 
   const filtered = useMemo(
     () =>
@@ -222,6 +226,21 @@ export function DevicesPage() {
               {teacherCount > 0 ? ` · ${teacherCount} guru` : ''}
             </p>
           </div>
+        );
+      },
+    },
+    {
+      key: 'accuracy',
+      header: 'Akurasi',
+      cell: row => {
+        const device = row.device;
+        if (!device || device.kind !== 'smartgrowth') return <span className="text-xs text-fg-subtle">-</span>;
+        return (
+          <DeviceAccuracyBadge
+            rows={calibrations.rows}
+            device={device}
+            onOpen={() => setHistoryFor({ device, title: row.displayName })}
+          />
         );
       },
     },
@@ -403,6 +422,8 @@ export function DevicesPage() {
               />
             </StatGrid>
 
+            <CalibrationSettingsCard settings={calibrations.settings} history={calibrations.history} />
+
             <Card>
               {rows.length === 0 ? (
                 <EmptyState
@@ -446,6 +467,14 @@ export function DevicesPage() {
       </QueryBoundary>
 
       <RenameDeviceDrawer key={renamer.key} open={renamer.open} device={renamer.target} onClose={renamer.close} />
+      <DeviceCalibrationHistoryModal
+        open={historyFor !== null}
+        device={historyFor?.device ?? null}
+        title={historyFor?.title ?? ''}
+        rows={calibrations.rows}
+        nameByUser={nameByUser}
+        onClose={() => setHistoryFor(null)}
+      />
     </div>
   );
 }
