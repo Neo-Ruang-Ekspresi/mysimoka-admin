@@ -1,10 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { motion } from 'motion/react';
-import { AlertTriangle, Cake, Ruler, Scale, Syringe, UserRound } from 'lucide-react';
+import { AlertTriangle, Cake, ChevronRight, Ruler, Scale, Syringe, UserRound } from 'lucide-react';
 import { useSchoolScope } from '@/scope/SchoolScope';
 import { useStudents } from '@/hooks/useSchoolData';
 import { useStudentHistory } from '@/hooks/useReports';
+import { useStudentAttempts } from '@/hooks/useRecordHistory';
+import { useDrawerState } from '@/hooks/useCrud';
+import { attemptKey } from '@/api/recordHistory';
+import type { ImmunizationRecordRow, MeasurementRecordRow } from '@/api/types';
+import { AttemptsBadge, ImmunizationRecordDrawer, MeasurementRecordDrawer } from '@/components/records/RecordDetailDrawer';
 import { toGrowthPoint, type GrowthPoint } from '@/lib/growthReport';
 import { normalizeSex, referenceCurve } from '@/lib/growth';
 import { formatDate, formatDecimal, genderLabel, initials } from '@/lib/format';
@@ -29,6 +34,10 @@ export function StudentGrowthPage() {
   const students = useStudents();
   const history = useStudentHistory(studentId);
   const [refTab, setRefTab] = useState<RefTab>('bmi');
+  const mAttempts = useStudentAttempts('measurement', studentId);
+  const iAttempts = useStudentAttempts('immunization', studentId);
+  const mViewer = useDrawerState<MeasurementRecordRow>();
+  const iViewer = useDrawerState<ImmunizationRecordRow>();
 
   const view = useMemo(() => students.data?.find(item => item.id === studentId) ?? null, [students.data, studentId]);
   const student = view?.student ?? null;
@@ -180,7 +189,7 @@ export function StudentGrowthPage() {
 
         <div className="grid gap-5 xl:grid-cols-5">
           <Card className="xl:col-span-3">
-            <CardHeader title="Riwayat pengukuran" description={`${points.length} record`} />
+            <CardHeader title="Riwayat pengukuran" description={`${points.length} sesi${mAttempts.available ? ` · ${mAttempts.entries.length || points.length} percobaan` : ""} · klik baris untuk detail`} />
             {points.length === 0 ? (
               <EmptyState title="Belum ada pengukuran" />
             ) : (
@@ -196,12 +205,35 @@ export function StudentGrowthPage() {
                       <th className="px-4 py-2.5 text-right">z IMT/U</th>
                       <th className="px-4 py-2.5">Status</th>
                       <th className="px-4 py-2.5 text-right">z TB/U</th>
+                      <th className="px-4 py-2.5">Percobaan</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
-                    {[...points].reverse().map((point, index) => (
-                      <motion.tr key={point.record.id} custom={index} variants={tableRowVariants} initial="hidden" animate="show">
-                        <td className="whitespace-nowrap px-4 py-2.5 text-fg">{formatDate(point.date)}</td>
+                    {[...points].reverse().map((point, index) => {
+                      const count = mAttempts.bySessionStudent.get(attemptKey(point.record.session_id, point.record.student_id))?.length ?? 0;
+                      return (
+                      <motion.tr
+                        key={point.record.id}
+                        custom={index}
+                        variants={tableRowVariants}
+                        initial="hidden"
+                        animate="show"
+                        onClick={() => mViewer.show(point.record)}
+                        className="cursor-pointer transition-colors hover:bg-brand-50/60 dark:hover:bg-brand-900/20"
+                      >
+                        <td className="whitespace-nowrap px-4 py-2.5">
+                          <button
+                            type="button"
+                            className="font-medium text-brand-600 hover:underline focus-visible:underline dark:text-brand-300"
+                            aria-label={`Detail pengukuran ${formatDate(point.date)}`}
+                            onClick={event => {
+                              event.stopPropagation();
+                              mViewer.show(point.record);
+                            }}
+                          >
+                            {formatDate(point.date)}
+                          </button>
+                        </td>
                         <td className="whitespace-nowrap px-4 py-2.5 text-fg-muted">{formatAgeMonths(point.ageMonths)}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums">{formatDecimal(point.heightCm)}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums">{formatDecimal(point.weightKg)}</td>
@@ -209,8 +241,12 @@ export function StudentGrowthPage() {
                         <td className="px-4 py-2.5 text-right tabular-nums">{formatZ(point.bmiZ)}</td>
                         <td className="px-4 py-2.5"><BmiStatusBadge status={point.bmiStatus} reason={point.reason} /></td>
                         <td className="px-4 py-2.5 text-right tabular-nums">{formatZ(point.hfaZ)}</td>
+                        <td className="px-4 py-2.5">
+                          {count > 1 ? <AttemptsBadge count={count} /> : <span className="text-xs text-fg-subtle">{mAttempts.available ? '1' : '-'}</span>}
+                        </td>
                       </motion.tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -218,7 +254,7 @@ export function StudentGrowthPage() {
           </Card>
 
           <Card className="xl:col-span-2">
-            <CardHeader title="Riwayat imunisasi" description={`${immunizations.length} record`} />
+            <CardHeader title="Riwayat imunisasi" description={`${immunizations.length} record · klik untuk detail`} />
             {immunizations.length === 0 ? (
               <EmptyState title="Belum ada imunisasi" icon={<Syringe className="size-6" />} />
             ) : (
@@ -232,13 +268,19 @@ export function StudentGrowthPage() {
                       className={`relative mt-1 size-[15px] shrink-0 rounded-full border-2 border-card ${record.status === 'given' ? 'bg-success' : 'bg-line-strong'}`}
                       aria-hidden
                     />
-                    <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => iViewer.show(record)}
+                      className="-mx-2 -my-1 min-w-0 flex-1 rounded-lg px-2 py-1 text-left transition-colors hover:bg-brand-50/60 focus-visible:bg-brand-50/60 dark:hover:bg-brand-900/20 dark:focus-visible:bg-brand-900/20"
+                    >
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-medium text-fg">
                           {record.vaccine_name}
                           {record.dose_label ? <span className="text-fg-subtle"> · {record.dose_label}</span> : null}
                         </p>
                         <ImmunizationStatusBadge status={record.status} />
+                        <AttemptsBadge count={iAttempts.bySessionStudent.get(attemptKey(record.session_id, record.student_id))?.length ?? 0} />
+                        <ChevronRight className="ml-auto size-4 text-fg-subtle" aria-hidden />
                       </div>
                       <p className="text-xs text-fg-subtle">
                         {formatDate(record.administered_at)}
@@ -249,7 +291,7 @@ export function StudentGrowthPage() {
                           <AlertTriangle className="mt-0.5 size-3 shrink-0" /> KIPI: {record.adverse_event_notes}
                         </p>
                       ) : null}
-                    </div>
+                    </button>
                   </motion.li>
                 ))}
               </motion.ol>
@@ -257,6 +299,23 @@ export function StudentGrowthPage() {
           </Card>
         </div>
       </div>
+
+      <MeasurementRecordDrawer
+        open={mViewer.open}
+        record={mViewer.target}
+        onClose={mViewer.close}
+        attempts={mViewer.target ? mAttempts.bySessionStudent.get(attemptKey(mViewer.target.session_id, mViewer.target.student_id)) : undefined}
+        historyAvailable={mAttempts.available}
+        historyLoading={mAttempts.isLoading}
+      />
+      <ImmunizationRecordDrawer
+        open={iViewer.open}
+        record={iViewer.target}
+        onClose={iViewer.close}
+        attempts={iViewer.target ? iAttempts.bySessionStudent.get(attemptKey(iViewer.target.session_id, iViewer.target.student_id)) : undefined}
+        historyAvailable={iAttempts.available}
+        historyLoading={iAttempts.isLoading}
+      />
     </div>
   );
 }

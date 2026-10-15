@@ -1,9 +1,13 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { CheckCircle2, Download, Pencil, PencilLine, PlayCircle, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, Download, Eye, Pencil, PencilLine, PlayCircle, Trash2, XCircle } from 'lucide-react';
 import { useSchoolScope } from '@/scope/SchoolScope';
 import { useClasses, useSchoolMutation, useStudents } from '@/hooks/useSchoolData';
 import { useDrawerState, useSelection } from '@/hooks/useCrud';
+import { useSessionAttempts } from '@/hooks/useRecordHistory';
+import { attemptKey } from '@/api/recordHistory';
+import { captureSourceLabel } from '@/lib/records';
+import { AttemptsBadge, ImmunizationRecordDrawer, MeasurementRecordDrawer } from '@/components/records/RecordDetailDrawer';
 import { deleteRecord, deleteRecords } from '@/api/crud/records';
 import type { ImmunizationRecordRow, ImmunizationRecordStatus, MeasurementRecordRow, SessionStatus } from '@/api/types';
 import { toMeasurementView, type MeasurementView } from '@/lib/analytics';
@@ -37,14 +41,6 @@ type RosterRow = {
   recordedAt: string | null;
 };
 
-const CAPTURE_SOURCE_LABEL: Record<string, string> = {
-  manual_form: 'Input manual',
-  device_ble: 'Perangkat BLE',
-  face_identification: 'Identifikasi wajah',
-  batch: 'Batch',
-  height_pose: 'Height pose',
-};
-
 export function SessionDetailPage({ kind }: { kind: SessionKind }) {
   const meta = KIND_META[kind];
   const { sessionId } = useParams();
@@ -57,6 +53,8 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const recordEditor = useDrawerState<RosterRow>();
+  const recordViewer = useDrawerState<RosterRow>();
+  const attempts = useSessionAttempts(kind, sessionId);
   const sessionEditor = useDrawerState<true>();
   const selection = useSelection();
   const { askStatus, askDelete } = useSessionActions(kind);
@@ -141,6 +139,8 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
     return true;
   });
 
+  const attemptsOf = (row: RosterRow) => attempts.bySessionStudent.get(attemptKey(session.id, row.studentId))?.length ?? 0;
+  const totalAttempts = roster.reduce((sum, row) => sum + (row.recordedAt ? Math.max(1, attemptsOf(row)) : 0), 0);
   const recordIdOf = (row: RosterRow) => (kind === 'measurement' ? row.measurement?.record.id : row.immunization?.id) ?? null;
   const canRecord = can.recordData && session.status !== 'cancelled';
 
@@ -185,7 +185,7 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
       cell: row =>
         row.measurement ? (
           <span className="text-xs text-fg-muted">
-            {CAPTURE_SOURCE_LABEL[row.measurement.record.capture_source] ?? row.measurement.record.capture_source}
+            {captureSourceLabel(row.measurement.record.capture_source)}
             {row.measurement.record.device_name ? ` · ${row.measurement.record.device_name}` : ''}
           </span>
         ) : (
@@ -234,6 +234,19 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
       ),
     },
     ...(kind === 'measurement' ? measurementColumns : immunizationColumns),
+    {
+      key: 'attempts',
+      header: 'Percobaan',
+      sortValue: row => attemptsOf(row),
+      cell: row =>
+        !row.recordedAt ? (
+          <span className="text-xs text-fg-subtle">-</span>
+        ) : attemptsOf(row) > 1 ? (
+          <AttemptsBadge count={attemptsOf(row)} />
+        ) : (
+          <span className="text-xs text-fg-subtle">{attempts.available ? '1' : '-'}</span>
+        ),
+    },
     { key: 'time', header: 'Dicatat', sortValue: row => row.recordedAt, cell: row => <span className="text-xs">{formatDateTime(row.recordedAt)}</span> },
     ...(!canRecord && !can.deleteData
       ? []
@@ -252,6 +265,7 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
               ) : (
                 <RowActions
                   actions={[
+                    { label: 'Lihat detail', icon: <Eye className="size-4" />, onSelect: () => recordViewer.show(row) },
                     { label: 'Ubah data', icon: <Pencil className="size-4" />, hidden: !canRecord, onSelect: () => recordEditor.show(row) },
                     {
                       label: 'Hapus data',
@@ -364,7 +378,7 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
           progress={rosterTotal > 0 ? rosterRecorded / rosterTotal : null}
           hint={`${rosterRecorded} dari ${rosterTotal} siswa aktif`}
         />
-        <StatCard label="Total record" value={formatNumber(recorded)} hint={`${rosterTotal - rosterRecorded} siswa belum dicatat`} />
+        <StatCard label="Total record" value={formatNumber(recorded)} hint={`${rosterTotal - rosterRecorded} siswa belum dicatat${attempts.available && totalAttempts > recorded ? ` · ${totalAttempts} percobaan` : ''}`} />
         {kind === 'measurement' ? (
           <>
             <StatCard label="Rata-rata tinggi" value={`${formatDecimal(avg(heights))} cm`} />
@@ -392,6 +406,8 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
           rows={filtered}
           columns={columns}
           getRowId={row => row.studentId}
+          onRowClick={row => recordViewer.show(row)}
+          isRowClickable={row => Boolean(row.recordedAt)}
           getSearchText={row => `${row.name} ${row.studentNumber ?? ''}`}
           searchPlaceholder="Cari siswa"
           initialPageSize={25}
@@ -425,6 +441,27 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
         />
       </Card>
 
+      {kind === 'measurement' ? (
+        <MeasurementRecordDrawer
+          open={recordViewer.open}
+          record={recordViewer.target?.measurement?.record ?? null}
+          onClose={recordViewer.close}
+          attempts={recordViewer.target ? attempts.bySessionStudent.get(attemptKey(session.id, recordViewer.target.studentId)) : undefined}
+          historyAvailable={attempts.available}
+          historyLoading={attempts.isLoading}
+          hideSessionLink
+        />
+      ) : (
+        <ImmunizationRecordDrawer
+          open={recordViewer.open}
+          record={recordViewer.target?.immunization ?? null}
+          onClose={recordViewer.close}
+          attempts={recordViewer.target ? attempts.bySessionStudent.get(attemptKey(session.id, recordViewer.target.studentId)) : undefined}
+          historyAvailable={attempts.available}
+          historyLoading={attempts.isLoading}
+          hideSessionLink
+        />
+      )}
       <RecordFormDrawer
         key={`record-${recordEditor.key}`}
         open={recordEditor.open}

@@ -34,6 +34,7 @@ export function DataTable<T>({
   filters,
   actions,
   onRowClick,
+  isRowClickable,
   emptyTitle = 'Belum ada data',
   emptyDescription,
   initialSort,
@@ -50,6 +51,8 @@ export function DataTable<T>({
   filters?: ReactNode;
   actions?: ReactNode;
   onRowClick?: (row: T) => void;
+  /** Batasi baris yang bisa diklik (default: semua bila `onRowClick` ada). */
+  isRowClickable?: (row: T) => boolean;
   emptyTitle?: string;
   emptyDescription?: ReactNode;
   initialSort?: { key: string; dir: 'asc' | 'desc' };
@@ -200,17 +203,33 @@ export function DataTable<T>({
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((row, index) => (
+              {pageRows.map((row, index) => {
+                const clickable = !!onRowClick && (isRowClickable?.(row) ?? true);
+                return (
                 <motion.tr
                   key={getRowId(row)}
                   custom={index}
                   variants={tableRowVariants}
                   initial="hidden"
                   animate="show"
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  onClick={clickable ? () => onRowClick!(row) : undefined}
+                  // Baris yang bisa diklik juga bisa difokus & dibuka dengan Enter/Spasi (aksesibilitas).
+                  tabIndex={clickable ? 0 : undefined}
+                  onKeyDown={
+                    clickable
+                      ? event => {
+                          if (event.target !== event.currentTarget) return;
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            onRowClick!(row);
+                          }
+                        }
+                      : undefined
+                  }
                   className={cn(
                     'border-b border-line transition-colors last:border-0',
-                    onRowClick && 'cursor-pointer hover:bg-brand-50/60 dark:hover:bg-brand-900/20',
+                    clickable &&
+                      'cursor-pointer outline-none hover:bg-brand-50/60 focus-visible:bg-brand-50/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400 dark:hover:bg-brand-900/20 dark:focus-visible:bg-brand-900/20',
                   )}
                 >
                   {selection ? (
@@ -232,7 +251,8 @@ export function DataTable<T>({
                     </td>
                   ))}
                 </motion.tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
