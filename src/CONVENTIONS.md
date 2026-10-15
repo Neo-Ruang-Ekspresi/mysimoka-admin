@@ -71,22 +71,22 @@ Ringkas, wajib diikuti agar pekerjaan paralel (CRUD, impor/ekspor, grafik/lapora
 
 | capability            | school | teacher | super |
 |-----------------------|:------:|:-------:|:-----:|
-| manageSchoolProfile   | ✓ | – | – |
+| manageSchoolProfile   | ✓ | – | ✓ |
 | viewJoinCode          | ✓ | – | ✓ |
-| manageJoinCode        | ✓ | – | – |
+| manageJoinCode        | ✓ | – | ✓ |
 | viewTeachers          | ✓ | – | ✓ |
-| manageTeachers        | ✓ | – | – |
-| manageAcademicYears   | ✓ | – | – |
-| manageClasses         | ✓ | – | – |
-| manageStudents        | ✓ | – | – |
-| createSessions        | ✓ | ✓ | – |
-| manageSessions        | ✓ | – | – |
-| recordData            | ✓ | ✓ | – |
-| deleteData            | ✓ | – | – |
-| importData            | ✓ | – | – |
+| manageTeachers        | ✓ | – | ✓ |
+| manageAcademicYears   | ✓ | – | ✓ |
+| manageClasses         | ✓ | – | ✓ |
+| manageStudents        | ✓ | – | ✓ |
+| createSessions        | ✓ | ✓ | ✓ |
+| manageSessions        | ✓ | – | ✓ |
+| recordData            | ✓ | ✓ | ✓ |
+| deleteData            | ✓ | – | ✓ |
+| importData            | ✓ | – | ✓ |
 | exportData            | ✓ | ✓ | ✓ |
-| manageDevices         | ✓ | – | – |
-| manageCalibrationSettings | ✓ | – | – |
+| manageDevices         | ✓ | – | ✓ |
+| manageCalibrationSettings | ✓ | – | ✓ |
 | manageGlobalCalibrationSettings | – | – | ✓ |
 | viewDeviceValidation  | ✓ | – | ✓ |
 

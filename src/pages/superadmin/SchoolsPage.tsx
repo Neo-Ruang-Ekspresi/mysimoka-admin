@@ -1,7 +1,11 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Download } from 'lucide-react';
-import type { SchoolOverviewRow } from '@/api/superadmin';
+import { Copy, Download, ExternalLink, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { regenerateSchoolJoinCode } from '@/api/superadminActions';
+import { useDrawerState } from '@/hooks/useCrud';
+import { RowActions } from '@/components/ui/RowActions';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { formatDate, formatNumber } from '@/lib/format';
 import { downloadCsv } from '@/lib/csv';
 import { isConnectedMembershipStatus, normalizeRoleKey } from '@/lib/roles';
@@ -12,20 +16,20 @@ import { Button } from '@/components/ui/Button';
 import { QueryBoundary } from '@/components/ui/States';
 import { useSchoolsOverview } from './useSuperAdmin';
 import { SuperAdminNotice } from './SuperAdminNotice';
+import { DeleteSchoolDialog, SchoolDetailDrawer, SchoolFormDrawer, type SchoolSummary } from './SchoolActions';
+import { useSuperMutation } from './useSuperActions';
 
-type Row = SchoolOverviewRow & {
-  classCount: number;
-  studentCount: number;
-  teacherCount: number;
-  adminCount: number;
-  measurementSessions: number;
-  immunizationSessions: number;
-  lastActivity: string | null;
-};
+type Row = SchoolSummary;
 
 export function SchoolsPage() {
   const overview = useSchoolsOverview();
   const navigate = useNavigate();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const viewer = useDrawerState<Row>();
+  const editor = useDrawerState<Row | 'new'>();
+  const deleter = useDrawerState<Row>();
+  const regenerate = useSuperMutation((id: string, role) => regenerateSchoolJoinCode(id, role));
 
   const rows = useMemo<Row[]>(() => {
     const data = overview.data;
@@ -86,7 +90,41 @@ export function SchoolsPage() {
     },
     { key: 'last', header: 'Aktivitas terakhir', sortValue: row => row.lastActivity, cell: row => formatDate(row.lastActivity) },
     { key: 'created', header: 'Terdaftar', sortValue: row => row.created_at, cell: row => formatDate(row.created_at) },
+    {
+      key: 'actions',
+      header: '',
+      className: 'w-12 text-right',
+      cell: row => (
+        <RowActions
+          actions={[
+            { label: 'Buka dashboard sekolah', icon: <ExternalLink className="size-4" />, onSelect: () => navigate(`/superadmin/sekolah/${row.id}`) },
+            { label: 'Ubah', icon: <Pencil className="size-4" />, onSelect: () => editor.show(row) },
+            { label: 'Salin kode gabung', icon: <Copy className="size-4" />, hidden: !row.join_code, onSelect: () => copyCode(row.join_code!) },
+            { label: 'Buat ulang kode gabung', icon: <RefreshCw className="size-4" />, onSelect: () => askRegenerate(row) },
+            { label: 'Hapus sekolah', icon: <Trash2 className="size-4" />, tone: 'danger', onSelect: () => deleter.show(row) },
+          ]}
+        />
+      ),
+    },
   ];
+
+  const copyCode = (code: string) =>
+    void navigator.clipboard
+      .writeText(code)
+      .then(() => toast.success('Kode gabung disalin.', { description: code }))
+      .catch(() => toast.error('Gagal menyalin kode.'));
+
+  const askRegenerate = (row: Row) =>
+    void confirm({
+      title: `Buat ulang kode gabung ${row.name ?? ''}?`,
+      tone: 'danger',
+      confirmLabel: 'Buat ulang',
+      message: 'Kode lama langsung tidak berlaku. Guru yang belum bergabung harus memakai kode baru.',
+      onConfirm: async () => {
+        const code = await regenerate.mutateAsync(row.id);
+        toast.success('Kode gabung baru dibuat.', { description: code });
+      },
+    });
 
   const exportCsv = () =>
     downloadCsv('sekolah-mysimoka', rows, [
@@ -106,7 +144,15 @@ export function SchoolsPage() {
 
   return (
     <div>
-      <PageHeader title="Semua Sekolah" description="Klik sekolah untuk melihat detail (read-only)." />
+      <PageHeader
+        title="Semua Sekolah"
+        description="Klik sekolah untuk detail, kode gabung, dan aksi. Buka dashboard sekolah untuk mengelola datanya."
+        actions={
+          <Button size="sm" icon={<Plus className="size-4" />} onClick={() => editor.show('new')}>
+            Tambah sekolah
+          </Button>
+        }
+      />
       <SuperAdminNotice />
       <Card>
         <QueryBoundary isLoading={overview.isLoading} error={overview.error} onRetry={() => void overview.refetch()}>
@@ -117,7 +163,7 @@ export function SchoolsPage() {
               getRowId={row => row.id}
               getSearchText={row => `${row.name ?? ''} ${row.number ?? ''} ${row.address ?? ''} ${row.user?.email ?? ''}`}
               searchPlaceholder="Cari nama / NPSN / alamat"
-              onRowClick={row => navigate(`/superadmin/sekolah/${row.id}`)}
+              onRowClick={row => viewer.show(row)}
               initialSort={{ key: 'students', dir: 'desc' }}
               emptyTitle="Belum ada sekolah terdaftar"
               actions={
@@ -129,6 +175,26 @@ export function SchoolsPage() {
           )}
         </QueryBoundary>
       </Card>
+      <SchoolDetailDrawer
+        open={viewer.open}
+        school={rows.find(row => row.id === viewer.target?.id) ?? viewer.target}
+        onClose={viewer.close}
+        onEdit={school => editor.show(school)}
+        onDelete={school => deleter.show(school)}
+      />
+      <SchoolFormDrawer
+        key={`school-${editor.key}`}
+        open={editor.open}
+        school={editor.target === 'new' ? null : editor.target}
+        onClose={editor.close}
+      />
+      <DeleteSchoolDialog
+        key={`delete-${deleter.key}`}
+        open={deleter.open}
+        school={deleter.target}
+        onClose={deleter.close}
+        onDeleted={viewer.close}
+      />
     </div>
   );
 }

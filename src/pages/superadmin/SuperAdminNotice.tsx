@@ -10,7 +10,7 @@ export function SuperAdminNotice() {
       <ShieldAlert className="mt-0.5 size-4 shrink-0" />
       <p>
         Mode pratinjau: token Anda belum memuat role <code>super_admin</code> (VITE_ENABLE_SUPERADMIN_PREVIEW=true).
-        Permintaan data kemungkinan ditolak Hasura sampai backend menerapkan <code>docs/superadmin_backend.md</code>.
+        Permintaan data &amp; aksi kemungkinan ditolak Hasura sampai backend menerapkan <code>docs/superadmin_backend.md</code>.
       </p>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { Download } from 'lucide-react';
+import { Download, UserPlus } from 'lucide-react';
 import type { AuthUserRow } from '@/api/types';
 import { formatDate, initials } from '@/lib/format';
 import { downloadCsv } from '@/lib/csv';
@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/Button';
 import { QueryBoundary } from '@/components/ui/States';
 import { useUsers } from './useSuperAdmin';
 import { SuperAdminNotice } from './SuperAdminNotice';
+import { useDrawerState } from '@/hooks/useCrud';
+import { CreateUserDrawer, UserDetailDrawer } from './UserActions';
 
 function authRoleCodes(user: AuthUserRow): string[] {
   return user.user_roles.map(item => item.role?.code).filter((code): code is string => Boolean(code));
@@ -22,6 +24,8 @@ export function UsersPage() {
   const users = useUsers();
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const viewer = useDrawerState<AuthUserRow>();
+  const creator = useDrawerState<true>();
 
   const rows = (users.data ?? []).filter(user => {
     if (roleFilter) {
@@ -122,7 +126,15 @@ export function UsersPage() {
 
   return (
     <div>
-      <PageHeader title="Pengguna & Membership" description="Seluruh akun beserta role auth dan keanggotaan sekolah (read-only)." />
+      <PageHeader
+        title="Pengguna & Membership"
+        description="Seluruh akun beserta role auth dan keanggotaan sekolah. Klik baris untuk detail & aksi."
+        actions={
+          <Button size="sm" icon={<UserPlus className="size-4" />} onClick={() => creator.show(true)}>
+            Buat pengguna
+          </Button>
+        }
+      />
       <SuperAdminNotice />
       <Card>
         <QueryBoundary isLoading={users.isLoading} error={users.error} onRetry={() => void users.refetch()}>
@@ -131,6 +143,7 @@ export function UsersPage() {
               rows={rows}
               columns={columns}
               getRowId={row => row.id}
+              onRowClick={row => viewer.show(row)}
               getSearchText={row =>
                 `${row.full_name ?? ''} ${row.email ?? ''} ${row.school_memberships.map(item => item.school?.name ?? '').join(' ')}`
               }
@@ -174,6 +187,8 @@ export function UsersPage() {
           )}
         </QueryBoundary>
       </Card>
+      <UserDetailDrawer open={viewer.open} user={users.data?.find(item => item.id === viewer.target?.id) ?? viewer.target} onClose={viewer.close} />
+      <CreateUserDrawer key={`create-${creator.key}`} open={creator.open} onClose={creator.close} />
     </div>
   );
 }

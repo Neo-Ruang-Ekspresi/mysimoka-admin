@@ -159,6 +159,8 @@ export function useSchoolMutation<TInput, TResult = unknown>(fn: (input: TInput,
         queryClient.invalidateQueries({ queryKey: ['school', schoolId] }),
         queryClient.invalidateQueries({ queryKey: ['academic-years'] }),
         queryClient.invalidateQueries({ queryKey: ['my-memberships'] }),
+        // Drill-down superadmin: daftar global (sekolah/pengguna/statistik) ikut diperbarui.
+        queryClient.invalidateQueries({ queryKey: ['super'] }),
       ]);
     },
   });

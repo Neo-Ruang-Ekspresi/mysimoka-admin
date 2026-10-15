@@ -7,7 +7,7 @@ export type { SchoolCapabilities, SchoolMode } from './capabilities';
  * Konteks sekolah yang sedang dilihat. Halaman-halaman sekolah dipakai ulang oleh:
  *  - Admin Sekolah  → mode 'school',  role school_admin, CRUD penuh,   basePath `/sekolah`
  *  - Guru           → mode 'teacher', role teacher, catat data saja,   basePath `/pengajar`
- *  - Superadmin     → mode 'super',   role super_admin, read-only,     basePath `/superadmin/sekolah/:id`
+ *  - Superadmin     → mode 'super',   role super_admin, aksi penuh,    basePath `/superadmin/sekolah/:id`
  *
  * Gating aksi: pakai `can.*` (lihat scope/capabilities.ts). `readOnly` dipertahankan untuk
  * kompatibilitas (= tidak ada kapabilitas tulis sama sekali).

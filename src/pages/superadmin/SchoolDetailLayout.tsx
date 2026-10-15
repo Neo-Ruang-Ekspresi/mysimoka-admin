@@ -14,7 +14,7 @@ import { SuperAdminNotice } from './SuperAdminNotice';
 
 const TABS = schoolPagesFor('super').filter(page => page.inNav !== false);
 
-/** Drill-down sekolah untuk Superadmin — memakai ulang halaman sekolah dalam mode read-only. */
+/** Drill-down sekolah untuk Superadmin — memakai ulang halaman sekolah dengan aksi penuh (role super_admin). */
 export function SchoolDetailLayout() {
   const { schoolId = '' } = useParams();
   const { superAdminRole } = useAuth();

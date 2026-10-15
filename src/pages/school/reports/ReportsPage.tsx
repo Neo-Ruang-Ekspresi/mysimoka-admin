@@ -22,7 +22,7 @@ const COVERAGE_OPTIONS = [30, 60, 90, 180, 365].map(days => ({ value: String(day
 const DATE_INPUT =
   'h-9 rounded-lg border border-line-strong bg-card px-2.5 text-sm text-fg focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20';
 
-/** Laporan gizi & imunisasi — admin sekolah, guru, dan drill-down superadmin (read-only). */
+/** Laporan gizi & imunisasi — admin sekolah, guru, dan drill-down superadmin. */
 export function ReportsPage() {
   const { schoolName } = useSchoolScope();
   const source = useReportSource();

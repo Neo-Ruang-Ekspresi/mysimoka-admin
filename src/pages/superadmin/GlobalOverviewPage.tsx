@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { Building2, ClipboardList, Ruler, School, Syringe, UserCog, Users } from 'lucide-react';
 import { formatNumber, formatPercent, monthKey, monthLabel } from '@/lib/format';
 import { readNumber } from '@/lib/object';
@@ -48,6 +49,8 @@ export function GlobalOverviewPage() {
     () =>
       (schools.data?.schools ?? [])
         .map(school => ({
+          id: school.id,
+          name: school.name ?? '-',
           label: (school.name ?? '-').slice(0, 18),
           value: school.classes.reduce((sum, item) => sum + (item.student_enrollments_aggregate.aggregate?.count ?? 0), 0),
         }))
@@ -80,7 +83,9 @@ export function GlobalOverviewPage() {
         </Card>
       ) : (
         <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatCard label="Sekolah" value={formatNumber(s.schools)} icon={<Building2 className="size-4" />} />
+          <CardLink to="/superadmin/sekolah" label="Lihat semua sekolah">
+            <StatCard label="Sekolah" value={formatNumber(s.schools)} hint="Lihat daftar sekolah" icon={<Building2 className="size-4" />} />
+          </CardLink>
           <StatCard label="Kelas" value={formatNumber(s.classes)} icon={<School className="size-4" />} />
           <StatCard
             label="Siswa"
@@ -88,12 +93,14 @@ export function GlobalOverviewPage() {
             hint={`${formatNumber(s.activeStudents)} aktif`}
             icon={<Users className="size-4" />}
           />
-          <StatCard
-            label="Pengguna"
-            value={formatNumber(s.users)}
-            hint={schools.data ? `${formatNumber(teacherCount)} membership guru` : undefined}
-            icon={<UserCog className="size-4" />}
-          />
+          <CardLink to="/superadmin/pengguna" label="Lihat semua pengguna">
+            <StatCard
+              label="Pengguna"
+              value={formatNumber(s.users)}
+              hint={schools.data ? `${formatNumber(teacherCount)} membership guru` : undefined}
+              icon={<UserCog className="size-4" />}
+            />
+          </CardLink>
           <StatCard
             label="Sesi"
             value={formatNumber(s.measurementSessions + s.immunizationSessions)}
@@ -136,7 +143,27 @@ export function GlobalOverviewPage() {
             ) : schools.isLoading ? (
               <LoadingState />
             ) : (
-              <SimpleBarChart name="Siswa aktif" data={topSchools} />
+              <>
+                <SimpleBarChart name="Siswa aktif" data={topSchools} />
+                {topSchools.length > 0 ? (
+                  <ol className="mt-3 grid gap-1 text-sm sm:grid-cols-2">
+                    {topSchools.map((school, index) => (
+                      <li key={school.id}>
+                        <Link
+                          to={`/superadmin/sekolah/${school.id}`}
+                          className="flex items-center justify-between gap-2 rounded-md px-2 py-1 transition-colors hover:bg-card-muted"
+                        >
+                          <span className="min-w-0 truncate text-fg">
+                            <span className="mr-1.5 text-xs text-fg-subtle">{index + 1}.</span>
+                            {school.name}
+                          </span>
+                          <span className="shrink-0 tabular-nums text-xs text-fg-muted">{formatNumber(school.value)} siswa</span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+              </>
             )}
           </CardBody>
         </Card>
@@ -154,5 +181,18 @@ export function GlobalOverviewPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+/** Bungkus StatCard agar bisa diklik (navigasi) dan difokus keyboard. */
+function CardLink({ to, label, children }: { to: string; label: string; children: ReactNode }) {
+  return (
+    <Link
+      to={to}
+      aria-label={label}
+      className="block rounded-xl outline-none transition-transform focus-visible:ring-2 focus-visible:ring-brand-400 [&>*]:h-full"
+    >
+      {children}
+    </Link>
   );
 }

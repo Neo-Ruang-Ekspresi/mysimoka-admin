@@ -61,7 +61,7 @@ function teacherNames(row: DeviceView, nameByUser: Map<string, string>): string[
 }
 
 /**
- * Perangkat BLE sekolah. Admin sekolah: ubah nama, aktif/nonaktif, hapus. Guru & superadmin: baca saja.
+ * Perangkat BLE sekolah. Admin sekolah & superadmin: ubah nama, aktif/nonaktif, hapus, reset akurasi. Guru: baca saja.
  * Perangkat dari data pengukuran yang belum ada di registri (app versi lama) tetap ditampilkan read-only.
  */
 export function DevicesPage() {

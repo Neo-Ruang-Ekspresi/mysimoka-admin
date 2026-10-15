@@ -1,5 +1,5 @@
 /**
- * Query & mutation untuk dashboard Admin Sekolah (dan drill-down read-only Superadmin).
+ * Query & mutation untuk dashboard Admin Sekolah (dan drill-down Superadmin).
  *
  * Semua query dan mutation di sini merupakan cermin dari mysimoka/src/services/auth.ts
  * (app mobile). Catatan permission Hasura (lihat metadata snapshot):
@@ -592,7 +592,7 @@ export async function updateSchoolProfile(
   if (!data.update_schools_by_pk?.id) throw new ApiError('Respons update profil sekolah tidak valid.');
 }
 
-function buildJoinCode(): string {
+export function buildJoinCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const random = new Uint32Array(8);
   crypto.getRandomValues(random);

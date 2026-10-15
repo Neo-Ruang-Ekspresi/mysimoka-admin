@@ -74,8 +74,9 @@ export const CAPABILITIES: Record<SchoolMode, SchoolCapabilities> = {
     ...(Object.fromEntries(Object.keys(NONE).map(key => [key, true])) as SchoolCapabilities),
     manageGlobalCalibrationSettings: false,
   },
-  // Superadmin drill-down: read-only + ekspor (+ batas toleransi global).
-  super: { ...NONE, viewJoinCode: true, viewTeachers: true, exportData: true, manageGlobalCalibrationSettings: true, viewDeviceValidation: true },
+  // Superadmin drill-down: semua aksi admin sekolah (role Hasura super_admin, filter {}) + batas
+  // toleransi global. Kartu toleransi tetap mengedit baris global (lihat DeviceCalibrationSection).
+  super: Object.fromEntries(Object.keys(NONE).map(key => [key, true])) as SchoolCapabilities,
   // Guru: lihat kelas/siswa, buat sesi & catat data, ekspor.
   teacher: { ...NONE, createSessions: true, recordData: true, exportData: true },
 };
