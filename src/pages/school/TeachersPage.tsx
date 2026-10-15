@@ -28,6 +28,7 @@ import { QueryBoundary } from '@/components/ui/States';
 import { RowActions } from '@/components/ui/RowActions';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
+import { TeacherDetailDrawer } from './teachers/TeacherDetailDrawer';
 
 const isEnabled = (row: MembershipRow) => isConnectedMembershipStatus(row.status ?? 'active');
 const memberName = (row: MembershipRow) => row.user?.full_name ?? row.user?.email ?? 'Anggota';
@@ -44,6 +45,7 @@ export function TeachersPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const adder = useDrawerState<true>();
   const editor = useDrawerState<MembershipRow>();
+  const viewer = useDrawerState<MembershipRow>();
   const toggle = useSchoolMutation((input: { id: string; enabled: boolean }, role) => setMembershipEnabled(input.id, input.enabled, role));
   const remove = useSchoolMutation((id: string, role) => deleteMembership(id, role));
 
@@ -212,6 +214,7 @@ export function TeachersPage() {
               rows={rows}
               columns={columns}
               getRowId={row => row.id}
+              onRowClick={row => viewer.show(row)}
               getSearchText={row => `${row.user?.full_name ?? ''} ${row.user?.email ?? ''}`}
               searchPlaceholder="Cari nama / email"
               initialSort={{ key: 'name', dir: 'asc' }}
@@ -254,6 +257,7 @@ export function TeachersPage() {
       </Card>
       <AddTeacherDrawer key={`add-${adder.key}`} open={adder.open} onClose={adder.close} />
       <EditMemberDrawer key={`edit-${editor.key}`} open={editor.open} member={editor.target} onClose={editor.close} />
+      <TeacherDetailDrawer open={viewer.open} member={viewer.target} onClose={viewer.close} />
     </div>
   );
 }

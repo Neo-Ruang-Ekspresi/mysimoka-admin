@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { Activity, AlertTriangle, HeartPulse, Ruler, Syringe, Users } from 'lucide-react';
 import { useSchoolScope } from '@/scope/SchoolScope';
 import type { ImmunizationRecordStatus } from '@/api/types';
@@ -46,6 +46,7 @@ type StudentFilter = 'measured' | 'risk' | 'stunting' | 'unmeasured' | 'all';
 
 export function NutritionTab({ report }: { report: GrowthReport }) {
   const { basePath } = useSchoolScope();
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<StudentFilter>('measured');
 
   const rows = useMemo(() => {
@@ -148,11 +149,12 @@ export function NutritionTab({ report }: { report: GrowthReport }) {
       </div>
 
       <Card>
-        <CardHeader title="Status per siswa" description="Klik nama siswa untuk melihat grafik pertumbuhan." />
+        <CardHeader title="Status per siswa" description="Klik baris siswa untuk melihat grafik & riwayat pertumbuhan." />
         <DataTable
           rows={rows}
           columns={columns}
           getRowId={row => row.student.id}
+          onRowClick={row => navigate(`${basePath}/siswa/${row.student.id}`)}
           getSearchText={row => `${row.student.student.full_name} ${row.student.student.student_number ?? ''} ${row.student.className}`}
           searchPlaceholder="Cari siswa / kelas…"
           filters={
@@ -190,6 +192,8 @@ export function NutritionTab({ report }: { report: GrowthReport }) {
 // ---------------------------------------------------------------------------
 
 export function ClassTab({ report, coverageDays }: { report: GrowthReport; coverageDays: number }) {
+  const { basePath } = useSchoolScope();
+  const navigate = useNavigate();
   const stackRows = useMemo(
     () =>
       report.classes
@@ -260,11 +264,12 @@ export function ClassTab({ report, coverageDays }: { report: GrowthReport; cover
         </Card>
       </div>
       <Card>
-        <CardHeader title="Ringkasan per kelas" description="Rata-rata TB/BB & z dari pengukuran terakhir tiap siswa." />
+        <CardHeader title="Ringkasan per kelas" description="Rata-rata TB/BB & z dari pengukuran terakhir tiap siswa. Klik baris untuk melihat siswa kelas tsb." />
         <DataTable
           rows={report.classes}
           columns={columns}
           getRowId={row => row.classId}
+          onRowClick={row => navigate(`${basePath}/siswa?kelas=${row.classId}`)}
           getSearchText={row => row.className}
           searchPlaceholder="Cari kelas…"
           emptyTitle="Belum ada kelas"
