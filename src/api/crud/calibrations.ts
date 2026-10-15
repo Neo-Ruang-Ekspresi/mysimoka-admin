@@ -399,3 +399,27 @@ export function deviceCalibrationState(rows: CalibrationRow[], intervalDays: num
   }
   return now - checks[0].time > intervalDays * 86_400_000 ? 'stale' : 'ok';
 }
+
+/**
+ * Reset data akurasi & kalibrasi satu perangkat: hapus seluruh log `device_calibrations` milik
+ * perangkat (cocok via device_id; log lama tanpa device_id dicocokkan via device_key/ble_id).
+ * Perangkat sendiri tidak diubah. Permission delete ditambahkan backend → bila belum ter-deploy
+ * melempar PermissionError (ditangani pemanggil dengan pesan khusus).
+ */
+export async function resetDeviceCalibrations(
+  device: { id: string; school_id: string; device_key: string | null; ble_id: string | null },
+  role: string,
+): Promise<number> {
+  const legacy: Array<Record<string, unknown>> = [];
+  if (device.device_key) legacy.push({ device_id: { _is_null: true }, device_key: { _eq: device.device_key } });
+  if (device.ble_id) legacy.push({ device_id: { _is_null: true }, ble_id: { _eq: device.ble_id } });
+  const data = await gql<{ delete_device_calibrations: { affected_rows: number } | null }>(
+    `mutation ResetDeviceCalibrations($schoolId: uuid!, $or: [device_calibrations_bool_exp!]!) {
+      delete_device_calibrations(where: { school_id: { _eq: $schoolId }, _or: $or }) { affected_rows }
+    }`,
+    { schoolId: device.school_id, or: [{ device_id: { _eq: device.id } }, ...legacy] },
+    { role },
+  );
+  if (!data.delete_device_calibrations) throw new ApiError('Reset kalibrasi ditolak server.');
+  return data.delete_device_calibrations.affected_rows;
+}

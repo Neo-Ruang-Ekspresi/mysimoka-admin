@@ -142,10 +142,27 @@ export function DeviceCalibrationHistoryModal({
   nameByUser: Map<string, string>;
   onClose: () => void;
 }) {
+  return (
+    <Modal open={open} title={`Akurasi & kalibrasi — ${title}`} description="Dicatat otomatis oleh aplikasi MySimoka." onClose={onClose} size="xl" footer={<DeviceValidationLink deviceId={device?.id} />}>
+      <DeviceCalibrationHistory device={device} rows={rows} nameByUser={nameByUser} />
+    </Modal>
+  );
+}
+
+/** Isi riwayat cek akurasi & kalibrasi satu perangkat (dipakai modal & drawer detail perangkat). */
+export function DeviceCalibrationHistory({
+  device,
+  rows,
+  nameByUser,
+}: {
+  device: DeviceRow | null;
+  rows: CalibrationRow[];
+  nameByUser: Map<string, string>;
+}) {
   const deviceRows = device ? calibrationsForDevice(rows, device) : [];
   const summaries = latestChecks(deviceRows);
   return (
-    <Modal open={open} title={`Akurasi & kalibrasi — ${title}`} description="Dicatat otomatis oleh aplikasi MySimoka." onClose={onClose} size="xl" footer={<DeviceValidationLink deviceId={device?.id} />}>
+    <>
       {deviceRows.length === 0 ? (
         <EmptyState
           icon={<Gauge className="size-6" />}
@@ -219,7 +236,7 @@ export function DeviceCalibrationHistoryModal({
           </div>
         </div>
       )}
-    </Modal>
+    </>
   );
 }
 

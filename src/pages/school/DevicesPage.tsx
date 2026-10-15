@@ -11,6 +11,7 @@ import {
   Pencil,
   PlayCircle,
   Radio,
+  RotateCcw,
   Ruler,
   Trash2,
 } from 'lucide-react';
@@ -44,7 +45,8 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { MenuButton } from '@/components/importExport/MenuButton';
 import { useCalibrations } from '@/hooks/useCalibrations';
-import { CalibrationSettingsCard, DeviceAccuracyBadge, DeviceCalibrationHistoryModal } from './DeviceCalibrationSection';
+import { CalibrationSettingsCard, DeviceAccuracyBadge } from './DeviceCalibrationSection';
+import { DeviceDetailDrawer, useResetDeviceCalibrations } from './DeviceDetailDrawer';
 
 const LOW_BATTERY = 20;
 const UNREGISTERED_LABEL = 'Belum terdaftar (dari data pengukuran)';
@@ -74,7 +76,8 @@ export function DevicesPage() {
   const remove = useSchoolMutation((id: string, role) => deleteDevice(id, role));
   const canManage = can.manageDevices && registry?.status === 'ok';
   const calibrations = useCalibrations();
-  const [historyFor, setHistoryFor] = useState<{ device: DeviceRow; title: string } | null>(null);
+  const viewer = useDrawerState<DeviceView>();
+  const { canReset, ask: askReset } = useResetDeviceCalibrations();
 
   const filtered = useMemo(
     () =>
@@ -239,7 +242,7 @@ export function DevicesPage() {
           <DeviceAccuracyBadge
             rows={calibrations.rows}
             device={device}
-            onOpen={() => setHistoryFor({ device, title: row.displayName })}
+            onOpen={() => viewer.show(row)}
           />
         );
       },
@@ -277,6 +280,13 @@ export function DevicesPage() {
                     device.is_active
                       ? { label: 'Nonaktifkan', icon: <PauseCircle className="size-4" />, onSelect: () => askToggle(device, row.displayName) }
                       : { label: 'Aktifkan kembali', icon: <PlayCircle className="size-4" />, onSelect: () => askToggle(device, row.displayName) },
+                    {
+                      label: 'Reset akurasi & kalibrasi',
+                      icon: <RotateCcw className="size-4" />,
+                      tone: 'danger' as const,
+                      hidden: !canReset || device.kind !== 'smartgrowth' || calibrations.history?.status !== 'ok',
+                      onSelect: () => void askReset(device, row.displayName),
+                    },
                     {
                       label: 'Hapus dari daftar',
                       icon: <Trash2 className="size-4" />,
@@ -436,6 +446,7 @@ export function DevicesPage() {
                   rows={filtered}
                   columns={columns}
                   getRowId={row => row.key}
+                  onRowClick={row => viewer.show(row)}
                   getSearchText={row =>
                     `${row.displayName} ${row.device?.name ?? ''} ${row.device?.serial ?? ''} ${row.bleId ?? ''} ${row.device?.device_key ?? ''}`
                   }
@@ -467,14 +478,7 @@ export function DevicesPage() {
       </QueryBoundary>
 
       <RenameDeviceDrawer key={renamer.key} open={renamer.open} device={renamer.target} onClose={renamer.close} />
-      <DeviceCalibrationHistoryModal
-        open={historyFor !== null}
-        device={historyFor?.device ?? null}
-        title={historyFor?.title ?? ''}
-        rows={calibrations.rows}
-        nameByUser={nameByUser}
-        onClose={() => setHistoryFor(null)}
-      />
+      <DeviceDetailDrawer open={viewer.open} row={viewer.target} nameByUser={nameByUser} onClose={viewer.close} />
     </div>
   );
 }

@@ -1,11 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, ClipboardCheck, FileSpreadsheet, HelpCircle, Printer } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ClipboardCheck, FileSpreadsheet, HelpCircle, Printer, RotateCcw } from 'lucide-react';
 import { useSchoolScope } from '@/scope/SchoolScope';
 import { calibrationsForDevice, useCalibrations } from '@/hooks/useCalibrations';
 import { deviceDisplayName } from '@/hooks/useDevices';
-import { fetchDevices, type DevicesResult } from '@/api/crud/devices';
+import { fetchDevices, type DeviceRow, type DevicesResult } from '@/api/crud/devices';
 import type { CalibrationMeasure, CalibrationRow } from '@/api/crud/calibrations';
 import { errorMessage } from '@/api/errors';
 import { buildAgreementReport, mean, sampleSd, type AgreementReport, type Interval } from '@/lib/agreementStats';
@@ -28,6 +28,7 @@ import { Field, Input, Select } from '@/components/ui/Form';
 import { EmptyState, QueryBoundary } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
 import { BlandAltmanChart } from '@/components/charts/BlandAltmanChart';
+import { useResetDeviceCalibrations } from './DeviceDetailDrawer';
 
 // ---------------------------------------------------------------------------
 // Util tampilan
@@ -85,7 +86,7 @@ const PRINT_CSS = `
 // Data perangkat
 // ---------------------------------------------------------------------------
 
-type DeviceOption = { key: string; label: string; sub: string | null; rows: CalibrationRow[] };
+type DeviceOption = { key: string; label: string; sub: string | null; rows: CalibrationRow[]; device?: DeviceRow };
 
 function useDeviceOptions(rows: CalibrationRow[]) {
   const { schoolId, role } = useSchoolScope();
@@ -107,6 +108,7 @@ function useDeviceOptions(rows: CalibrationRow[]) {
         label: deviceDisplayName(device),
         sub: [device.serial ? `SN ${device.serial}` : null, device.ble_id].filter(Boolean).join(' · ') || null,
         rows: deviceRows,
+        device,
       });
     }
     // Baris yang tidak cocok dengan perangkat terdaftar (registri belum tersedia / perangkat dihapus).
@@ -137,6 +139,7 @@ export function DeviceValidationPage() {
   const { basePath, schoolName, can } = useSchoolScope();
   const toast = useToast();
   const calibrations = useCalibrations();
+  const { canReset, ask: askReset } = useResetDeviceCalibrations();
   const { options, isLoading: devicesLoading } = useDeviceOptions(calibrations.rows);
   const [params, setParams] = useSearchParams();
 
@@ -236,6 +239,17 @@ export function DeviceValidationPage() {
         actions={
           report && report.pairs.length > 0 ? (
             <>
+              {canReset && device?.device ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="no-print text-danger"
+                  icon={<RotateCcw className="size-3.5" />}
+                  onClick={() => void askReset(device.device!, device.label)}
+                >
+                  Reset data uji
+                </Button>
+              ) : null}
               {can.exportData ? (
                 <Button variant="secondary" size="sm" icon={<FileSpreadsheet className="size-3.5" />} onClick={() => void runExport()}>
                   Excel
