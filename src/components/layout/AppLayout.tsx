@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, useOutlet } from 'react-router';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
-import { Building2, ChevronDown, GraduationCap, LogOut, Menu, Moon, ShieldCheck, Sun, X, type LucideIcon } from 'lucide-react';
+import { Building2, ChevronDown, GraduationCap, KeyRound, LogOut, Menu, Moon, ShieldCheck, Sun, X, type LucideIcon } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
 import { cn } from '@/lib/object';
 import { initials } from '@/lib/format';
 import { DURATION, EASE_OUT, backdrop, drawerPanel, pageVariants, springSnappy } from '@/lib/motion';
 import { SCHOOL_BASE_PATH, SUPER_BASE_PATH, TEACHER_BASE_PATH } from '@/routes/paths';
 import { useTheme } from './theme';
+import { ChangePasswordDrawer } from './ChangePasswordDrawer';
 
 export type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
 export type LayoutMode = 'school' | 'super' | 'teacher';
@@ -208,8 +209,14 @@ function UserMenu({ mode }: { mode: LayoutMode }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useClickOutside(() => setOpen(false));
+  const [password, setPassword] = useState({ open: false, key: 0 });
   return (
     <div ref={ref} className="relative">
+      <ChangePasswordDrawer
+        key={password.key}
+        open={password.open}
+        onClose={() => setPassword(current => ({ ...current, open: false }))}
+      />
       <button
         type="button"
         onClick={() => setOpen(value => !value)}
@@ -251,6 +258,17 @@ function UserMenu({ mode }: { mode: LayoutMode }) {
                   </button>
                 );
               })}
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setPassword(current => ({ open: true, key: current.key + 1 }));
+              }}
+              className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-fg transition-colors hover:bg-card-muted"
+            >
+              <KeyRound className="size-4" />
+              Ubah password
+            </button>
             <button
               type="button"
               onClick={() => {

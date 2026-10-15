@@ -196,3 +196,60 @@ export async function getValidAccessToken(): Promise<string | null> {
 export function logout(): void {
   clearAuthSession();
 }
+
+const CHANGE_PASSWORD_ENDPOINT = '/me/password';
+
+/** Gagal ganti password; `field` = 'current' bila password saat ini salah. */
+export class ChangePasswordError extends ApiError {
+  readonly status: number;
+  readonly field: 'current' | null;
+  constructor(message: string, status: number, field: 'current' | null = null) {
+    super(message, `change-password-${status}`);
+    this.name = 'ChangePasswordError';
+    this.status = status;
+    this.field = field;
+  }
+}
+
+/**
+ * Ganti password akun sendiri: POST {AUTH_BASE}/me/password (Bearer access token).
+ * Bila server mengembalikan token baru (sesi lain dicabut), simpan seperti login.
+ */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const token = await getValidAccessToken();
+  if (!token) throw new ChangePasswordError('Sesi berakhir. Silakan login ulang.', 401);
+  let response: Response;
+  try {
+    response = await fetch(authUrl(CHANGE_PASSWORD_ENDPOINT), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  } catch {
+    throw new NetworkError();
+  }
+  const body = await parseBody(response);
+  const message = normalizeApiErrorMessage(body);
+  if (!response.ok) {
+    switch (response.status) {
+      case 401:
+        throw new ChangePasswordError(message ?? 'Password saat ini salah.', 401, 'current');
+      case 404:
+        throw new ChangePasswordError('Fitur ganti password belum aktif di server.', 404);
+      case 429:
+        throw new ChangePasswordError('Terlalu banyak percobaan, coba lagi sebentar.', 429);
+      default:
+        throw new ChangePasswordError(message ?? 'Gagal mengubah password. Silakan coba lagi.', response.status);
+    }
+  }
+  const tokens = normalizeLoginResult(body);
+  if (tokens) {
+    const { refreshToken, user } = getAuthSession();
+    setAuthSession({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken ?? refreshToken,
+      // Data user/role tidak berubah saat ganti password → pertahankan yang ada.
+      user,
+    });
+  }
+}
