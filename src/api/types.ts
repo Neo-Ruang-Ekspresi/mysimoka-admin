@@ -122,6 +122,9 @@ export type MeasurementRecordRow = {
   measured_at: string;
   height_cm: number | string | null;
   weight_kg: number | string | null;
+  /** Data pembanding (alat lain); undefined bila backend belum punya kolomnya. */
+  reference_weight_kg?: number | string | null;
+  reference_height_cm?: number | string | null;
   notes: string | null;
   device_name: string | null;
   created_at: string | null;

@@ -50,6 +50,9 @@ export type HistoryEntry = {
   measuredAt: string | null;
   heightCm: number | null;
   weightKg: number | null;
+  /** Data pembanding (alat lain) bila ada di snapshot. */
+  referenceHeightCm: number | null;
+  referenceWeightKg: number | null;
   captureSource: string | null;
   deviceName: string | null;
   deviceId: string | null;
@@ -106,6 +109,8 @@ function toEntry(row: HistoryRowRaw): HistoryEntry {
     measuredAt: readString(s.measured_at),
     heightCm: readNumber(s.height_cm),
     weightKg: readNumber(s.weight_kg),
+    referenceHeightCm: readNumber(s.reference_height_cm),
+    referenceWeightKg: readNumber(s.reference_weight_kg),
     captureSource: readString(s.capture_source),
     deviceName: readString(s.device_name),
     deviceId: readString(s.device_id),

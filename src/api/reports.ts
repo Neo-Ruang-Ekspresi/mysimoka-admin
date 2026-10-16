@@ -7,6 +7,7 @@
  * untuk laporan sekolah: semua angka diturunkan dari record yang sudah ada di cache (tanpa query ekstra).
  */
 import { gql } from './graphql';
+import { withReferenceFields } from './measurementReference';
 import type { ImmunizationRecordRow, MeasurementRecordRow } from './types';
 
 const MEASUREMENT_FIELDS =
@@ -24,15 +25,17 @@ export async function fetchStudentMeasurements(
   role: string,
 ): Promise<MeasurementRecordRow[]> {
   if (sessionIds.length === 0) return [];
-  const data = await gql<{ student_measurement_records: MeasurementRecordRow[] }>(
-    `query StudentMeasurementHistory($studentId: uuid!, $sessionIds: [uuid!]!) {
-      student_measurement_records(
-        where: { student_id: { _eq: $studentId }, session_id: { _in: $sessionIds } }
-        order_by: [{ measured_at: asc }]
-      ) { ${MEASUREMENT_FIELDS} }
-    }`,
-    { studentId, sessionIds },
-    { role },
+  const data = await withReferenceFields(MEASUREMENT_FIELDS, fields =>
+    gql<{ student_measurement_records: MeasurementRecordRow[] }>(
+      `query StudentMeasurementHistory($studentId: uuid!, $sessionIds: [uuid!]!) {
+        student_measurement_records(
+          where: { student_id: { _eq: $studentId }, session_id: { _in: $sessionIds } }
+          order_by: [{ measured_at: asc }]
+        ) { ${fields} }
+      }`,
+      { studentId, sessionIds },
+      { role },
+    ),
   );
   return data.student_measurement_records;
 }

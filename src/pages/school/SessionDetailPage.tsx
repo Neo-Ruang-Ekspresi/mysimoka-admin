@@ -7,8 +7,9 @@ import { useDrawerState, useSelection } from '@/hooks/useCrud';
 import { useSessionAttempts } from '@/hooks/useRecordHistory';
 import { attemptKey } from '@/api/recordHistory';
 import { captureSourceLabel } from '@/lib/records';
-import { AttemptsBadge, ImmunizationRecordDrawer, MeasurementRecordDrawer } from '@/components/records/RecordDetailDrawer';
+import { AttemptsBadge, ImmunizationRecordDrawer, MeasurementRecordDrawer, ReferenceNote } from '@/components/records/RecordDetailDrawer';
 import { deleteRecord, deleteRecords } from '@/api/crud/records';
+import { readReference } from '@/api/measurementReference';
 import type { ImmunizationRecordRow, ImmunizationRecordStatus, MeasurementRecordRow, SessionStatus } from '@/api/types';
 import { toMeasurementView, type MeasurementView } from '@/lib/analytics';
 import { formatDate, formatDateTime, formatDecimal, formatNumber, formatPercent } from '@/lib/format';
@@ -163,8 +164,28 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
   };
 
   const measurementColumns: Column<RosterRow>[] = [
-    { key: 'height', header: 'TB (cm)', sortValue: row => row.measurement?.heightCm, cell: row => formatDecimal(row.measurement?.heightCm) },
-    { key: 'weight', header: 'BB (kg)', sortValue: row => row.measurement?.weightKg, cell: row => formatDecimal(row.measurement?.weightKg) },
+    {
+      key: 'height',
+      header: 'TB (cm)',
+      sortValue: row => row.measurement?.heightCm,
+      cell: row => (
+        <>
+          {formatDecimal(row.measurement?.heightCm)}
+          <ReferenceNote record={row.measurement?.record} kind="height" />
+        </>
+      ),
+    },
+    {
+      key: 'weight',
+      header: 'BB (kg)',
+      sortValue: row => row.measurement?.weightKg,
+      cell: row => (
+        <>
+          {formatDecimal(row.measurement?.weightKg)}
+          <ReferenceNote record={row.measurement?.record} kind="weight" />
+        </>
+      ),
+    },
     {
       key: 'bmi',
       header: 'IMT / status',
@@ -292,6 +313,10 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
             { header: 'Berat (kg)', value: (row: RosterRow) => row.measurement?.weightKg },
             { header: 'IMT', value: (row: RosterRow) => (row.measurement?.bmi ? row.measurement.bmi.toFixed(1) : '') },
             { header: 'Status Gizi', value: (row: RosterRow) => row.measurement?.category },
+            { header: 'Berat pembanding (kg)', value: (row: RosterRow) => readReference(row.measurement?.record)?.weightKg },
+            { header: 'Tinggi pembanding (cm)', value: (row: RosterRow) => readReference(row.measurement?.record)?.heightCm },
+            { header: 'Selisih berat (kg)', value: (row: RosterRow) => readReference(row.measurement?.record)?.weightDiff },
+            { header: 'Selisih tinggi (cm)', value: (row: RosterRow) => readReference(row.measurement?.record)?.heightDiff },
             { header: 'Metode', value: (row: RosterRow) => row.measurement?.record.capture_source },
             { header: 'Catatan', value: (row: RosterRow) => row.measurement?.record.notes },
           ]

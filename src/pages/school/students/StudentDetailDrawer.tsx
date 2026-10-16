@@ -16,7 +16,7 @@ import { useDrawerState, useStudentFaces } from '@/hooks/useCrud';
 import { useStudentAttempts, type AttemptHistory } from '@/hooks/useRecordHistory';
 import { attemptKey } from '@/api/recordHistory';
 import type { ImmunizationRecordRow, MeasurementRecordRow } from '@/api/types';
-import { AttemptsBadge, ImmunizationRecordDrawer, MeasurementRecordDrawer } from '@/components/records/RecordDetailDrawer';
+import { AttemptsBadge, ImmunizationRecordDrawer, MeasurementRecordDrawer, ReferenceNote } from '@/components/records/RecordDetailDrawer';
 import {
   deleteEnrollment,
   ENROLLMENT_STATUS_LABEL,
@@ -402,8 +402,14 @@ export function StudentDetailDrawer({
                             </button>
                           </td>
                           <td className="px-3 py-2">{sessionName.get(item.record.session_id) ?? '-'}</td>
-                          <td className="px-3 py-2 tabular-nums">{formatDecimal(item.heightCm)}</td>
-                          <td className="px-3 py-2 tabular-nums">{formatDecimal(item.weightKg)}</td>
+                          <td className="px-3 py-2 tabular-nums">
+                            {formatDecimal(item.heightCm)}
+                            <ReferenceNote record={item.record} kind="height" />
+                          </td>
+                          <td className="px-3 py-2 tabular-nums">
+                            {formatDecimal(item.weightKg)}
+                            <ReferenceNote record={item.record} kind="weight" />
+                          </td>
                           <td className="px-3 py-2 tabular-nums">
                             {formatDecimal(item.bmi)} {item.category ? <span className="text-xs text-fg-subtle">· {item.category}</span> : null}
                           </td>

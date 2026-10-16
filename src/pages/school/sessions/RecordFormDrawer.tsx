@@ -9,6 +9,8 @@ import {
   type RecordKind,
 } from '@/api/crud/records';
 import { errorMessage } from '@/api/errors';
+import { isReferenceSupported } from '@/api/measurementReference';
+import { readNumber } from '@/lib/object';
 import type { ImmunizationRecordRow, ImmunizationRecordStatus } from '@/api/types';
 import type { MeasurementView } from '@/lib/analytics';
 import { IMMUNIZATION_STATUS_LABEL } from '@/components/ui/Badge';
@@ -29,6 +31,8 @@ export type RecordTarget = {
 type FormState = {
   height: string;
   weight: string;
+  refHeight: string;
+  refWeight: string;
   notes: string;
   status: ImmunizationRecordStatus;
   vaccineName: string;
@@ -67,6 +71,8 @@ export function RecordFormDrawer({
   const [form, setForm] = useState<FormState>({
     height: m?.heightCm?.toString() ?? '',
     weight: m?.weightKg?.toString() ?? '',
+    refHeight: readNumber(m?.record.reference_height_cm)?.toString() ?? '',
+    refWeight: readNumber(m?.record.reference_weight_kg)?.toString() ?? '',
     notes: (kind === 'measurement' ? m?.record.notes : i?.notes) ?? '',
     status: i?.status ?? 'given',
     vaccineName: i?.vaccine_name ?? session.vaccine_name ?? '',
@@ -77,6 +83,8 @@ export function RecordFormDrawer({
     adverseEventNotes: i?.adverse_event_notes ?? '',
   });
   const [errors, setErrors] = useState<Errors>({});
+  // Backend lama (kolom pembanding belum ada) → input disembunyikan & kolom tidak dikirim.
+  const showReference = kind === 'measurement' && isReferenceSupported();
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm(current => ({ ...current, [key]: value }));
     setErrors(current => (current[key] ? { ...current, [key]: undefined } : current));
@@ -85,7 +93,12 @@ export function RecordFormDrawer({
   const mutation = useSchoolMutation(async (input: FormState, role) => {
     if (!target) return;
     if (kind === 'measurement') {
-      const values = { heightCm: parseNum(input.height), weightKg: parseNum(input.weight), notes: input.notes };
+      const values = {
+        heightCm: parseNum(input.height),
+        weightKg: parseNum(input.weight),
+        notes: input.notes,
+        ...(showReference ? { referenceHeightCm: parseNum(input.refHeight), referenceWeightKg: parseNum(input.refWeight) } : {}),
+      };
       if (existingId) return updateMeasurementRecord(existingId, { ...values, recordedBy: userId }, role);
       if (!userId) throw new Error('Data user tidak ditemukan. Silakan login ulang.');
       return upsertMeasurementRecord(
@@ -120,6 +133,10 @@ export function RecordFormDrawer({
       if (height === null && weight === null) next.form = 'Isi minimal tinggi atau berat badan.';
       if (height !== null && (!Number.isFinite(height) || height < 30 || height > 250)) next.height = 'Tinggi harus 30–250 cm.';
       if (weight !== null && (!Number.isFinite(weight) || weight < 1 || weight > 300)) next.weight = 'Berat harus 1–300 kg.';
+      const refHeight = parseNum(form.refHeight);
+      const refWeight = parseNum(form.refWeight);
+      if (refHeight !== null && (!Number.isFinite(refHeight) || refHeight <= 0 || refHeight > 250)) next.refHeight = 'Tinggi pembanding tidak valid.';
+      if (refWeight !== null && (!Number.isFinite(refWeight) || refWeight <= 0 || refWeight > 300)) next.refWeight = 'Berat pembanding tidak valid.';
     } else if (!form.vaccineName.trim()) {
       next.vaccineName = 'Jenis imunisasi wajib diisi.';
     }
@@ -168,6 +185,20 @@ export function RecordFormDrawer({
                 <Input id={id} inputMode="decimal" value={form.weight} onChange={e => set('weight', e.target.value)} placeholder="mis. 28.2" aria-invalid={Boolean(errors.weight)} />
               )}
             </Field>
+            {showReference ? (
+              <>
+                <Field label="Tinggi pembanding (cm, opsional)" error={errors.refHeight}>
+                  {id => (
+                    <Input id={id} inputMode="decimal" value={form.refHeight} onChange={e => set('refHeight', e.target.value)} placeholder="dari alat pembanding" aria-invalid={Boolean(errors.refHeight)} />
+                  )}
+                </Field>
+                <Field label="Berat pembanding (kg, opsional)" error={errors.refWeight}>
+                  {id => (
+                    <Input id={id} inputMode="decimal" value={form.refWeight} onChange={e => set('refWeight', e.target.value)} placeholder="dari alat pembanding" aria-invalid={Boolean(errors.refWeight)} />
+                  )}
+                </Field>
+              </>
+            ) : null}
           </>
         ) : (
           <>

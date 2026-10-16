@@ -10,6 +10,7 @@
  */
 import { gql } from './graphql';
 import { errorMessage } from './errors';
+import { readReference } from './measurementReference';
 import {
   fetchClasses,
   fetchEnrollments,
@@ -268,6 +269,24 @@ function sessionRoster(
   return roster.sort((a, b) => (a.student?.student.full_name ?? '').localeCompare(b.student?.student.full_name ?? '', 'id-ID'));
 }
 
+/** Data pembanding (alat lain) + selisih (hasil alat − pembanding). Kosong bila tidak diisi. */
+const REFERENCE_COLUMNS = [
+  { header: 'Berat pembanding (kg)', width: 14 },
+  { header: 'Tinggi pembanding (cm)', width: 14 },
+  { header: 'Selisih berat', width: 12 },
+  { header: 'Selisih tinggi', width: 12 },
+];
+
+function signedCell(value: number | null | undefined): CellValue {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  return { t: 'n', v: Math.round(value * 100) / 100, z: '+0.00;-0.00;0.00' };
+}
+
+function referenceCells(record: MeasurementRecordRow | null): CellValue[] {
+  const ref = readReference(record);
+  return [numberCell(ref?.weightKg, 2), numberCell(ref?.heightCm, 2), signedCell(ref?.weightDiff), signedCell(ref?.heightDiff)];
+}
+
 const MEASUREMENT_COLUMNS = [
   { header: 'No', width: 5 },
   { header: 'NIS', width: 16, text: true },
@@ -278,6 +297,7 @@ const MEASUREMENT_COLUMNS = [
   { header: 'Berat (kg)', width: 12 },
   { header: 'IMT', width: 8 },
   { header: 'Status gizi', width: 12 },
+  ...REFERENCE_COLUMNS,
   { header: 'Metode', width: 18 },
   { header: 'Waktu', width: 18 },
   { header: 'Catatan', width: 30 },
@@ -319,6 +339,7 @@ function measurementRows(
       numberCell(view?.weightKg),
       numberCell(view?.bmi),
       view?.category ?? (record ? '' : 'Belum diukur'),
+      ...referenceCells(record),
       record ? CAPTURE_LABEL[record.capture_source] ?? record.capture_source : '',
       dateTimeCell(record?.measured_at),
       record?.notes ?? '',
@@ -531,6 +552,7 @@ export async function buildRecapExport(
         numberCell(view.weightKg),
         numberCell(view.bmi),
         view.category ?? '',
+        ...referenceCells(record),
         CAPTURE_LABEL[record.capture_source] ?? record.capture_source,
         dateTimeCell(record.measured_at),
         record.notes ?? '',
@@ -604,6 +626,7 @@ export async function buildRecapExport(
         { header: 'Berat (kg)', width: 12 },
         { header: 'IMT', width: 8 },
         { header: 'Status gizi', width: 12 },
+        ...REFERENCE_COLUMNS,
         { header: 'Metode', width: 18 },
         { header: 'Waktu', width: 18 },
         { header: 'Catatan', width: 28 },

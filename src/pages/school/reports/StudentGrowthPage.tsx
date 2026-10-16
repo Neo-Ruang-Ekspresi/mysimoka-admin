@@ -9,7 +9,7 @@ import { useStudentAttempts } from '@/hooks/useRecordHistory';
 import { useDrawerState } from '@/hooks/useCrud';
 import { attemptKey } from '@/api/recordHistory';
 import type { ImmunizationRecordRow, MeasurementRecordRow } from '@/api/types';
-import { AttemptsBadge, ImmunizationRecordDrawer, MeasurementRecordDrawer } from '@/components/records/RecordDetailDrawer';
+import { AttemptsBadge, ImmunizationRecordDrawer, MeasurementRecordDrawer, ReferenceNote } from '@/components/records/RecordDetailDrawer';
 import { toGrowthPoint, type GrowthPoint } from '@/lib/growthReport';
 import { normalizeSex, referenceCurve } from '@/lib/growth';
 import { formatDate, formatDecimal, genderLabel, initials } from '@/lib/format';
@@ -235,8 +235,14 @@ export function StudentGrowthPage() {
                           </button>
                         </td>
                         <td className="whitespace-nowrap px-4 py-2.5 text-fg-muted">{formatAgeMonths(point.ageMonths)}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{formatDecimal(point.heightCm)}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{formatDecimal(point.weightKg)}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">
+                          {formatDecimal(point.heightCm)}
+                          <ReferenceNote record={point.record} kind="height" />
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">
+                          {formatDecimal(point.weightKg)}
+                          <ReferenceNote record={point.record} kind="weight" />
+                        </td>
                         <td className="px-4 py-2.5 text-right tabular-nums">{formatDecimal(point.bmi)}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums">{formatZ(point.bmiZ)}</td>
                         <td className="px-4 py-2.5"><BmiStatusBadge status={point.bmiStatus} reason={point.reason} /></td>

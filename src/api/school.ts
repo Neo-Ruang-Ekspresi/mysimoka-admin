@@ -9,6 +9,7 @@
  *  - Tabel sesi & record belum punya relationship di Hasura → join dilakukan di klien.
  */
 import { gql } from './graphql';
+import { referenceColumns, withReferenceFields } from './measurementReference';
 import { ApiError } from './errors';
 import { registerAccount } from './auth';
 import type {
@@ -174,15 +175,17 @@ export async function fetchMeasurementRecords(
   role: string,
 ): Promise<MeasurementRecordRow[]> {
   if (sessionIds.length === 0) return [];
-  const data = await gql<{ student_measurement_records: MeasurementRecordRow[] }>(
-    `query MeasurementRecords($sessionIds: [uuid!]!) {
-      student_measurement_records(
-        where: { session_id: { _in: $sessionIds } }
-        order_by: [{ measured_at: desc }]
-      ) { ${MEASUREMENT_RECORD_FIELDS} }
-    }`,
-    { sessionIds },
-    { role },
+  const data = await withReferenceFields(MEASUREMENT_RECORD_FIELDS, fields =>
+    gql<{ student_measurement_records: MeasurementRecordRow[] }>(
+      `query MeasurementRecords($sessionIds: [uuid!]!) {
+        student_measurement_records(
+          where: { session_id: { _in: $sessionIds } }
+          order_by: [{ measured_at: desc }]
+        ) { ${fields} }
+      }`,
+      { sessionIds },
+      { role },
+    ),
   );
   return data.student_measurement_records;
 }
@@ -480,12 +483,16 @@ export async function upsertMeasurementRecord(
     heightCm: number | null;
     weightKg: number | null;
     notes: string | null;
+    /** undefined = kolom tidak dikirim (backend lama). */
+    referenceWeightKg?: number | null;
+    referenceHeightCm?: number | null;
   },
   role: string,
 ): Promise<void> {
   if (input.heightCm === null && input.weightKg === null) {
     throw new ApiError('Isi minimal tinggi atau berat badan.');
   }
+  const reference = referenceColumns(input);
   await gql(
     `mutation UpsertStudentMeasurementRecord($object: student_measurement_records_insert_input!) {
       insert_student_measurement_records_one(
@@ -495,6 +502,7 @@ export async function upsertMeasurementRecord(
           update_columns: [
             student_enrollment_id recorded_by capture_method capture_source measured_at
             height_cm weight_kg notes device_id device_name device_payload client_record_id
+            ${Object.keys(reference).join(' ')}
           ]
         }
       ) { id }
@@ -515,6 +523,7 @@ export async function upsertMeasurementRecord(
         device_name: null,
         device_payload: {},
         client_record_id: null,
+        ...reference,
       },
     },
     { role },

@@ -7,6 +7,7 @@
  */
 import { gql } from '../graphql';
 import { ApiError } from '../errors';
+import { referenceColumns } from '../measurementReference';
 import type { ImmunizationRecordStatus } from '../types';
 
 export { upsertImmunizationRecord, upsertMeasurementRecord } from '../school';
@@ -25,7 +26,15 @@ function blankToNull(value: string | null | undefined): string | null {
 
 export async function updateMeasurementRecord(
   recordId: string,
-  input: { heightCm: number | null; weightKg: number | null; notes: string | null; recordedBy?: string | null },
+  input: {
+    heightCm: number | null;
+    weightKg: number | null;
+    notes: string | null;
+    recordedBy?: string | null;
+    /** undefined = kolom tidak dikirim (backend lama). */
+    referenceWeightKg?: number | null;
+    referenceHeightCm?: number | null;
+  },
   role: string,
 ): Promise<void> {
   if (input.heightCm === null && input.weightKg === null) throw new ApiError('Isi minimal tinggi atau berat badan.');
@@ -39,6 +48,7 @@ export async function updateMeasurementRecord(
         height_cm: input.heightCm,
         weight_kg: input.weightKg,
         notes: blankToNull(input.notes),
+        ...referenceColumns(input),
         ...(input.recordedBy ? { recorded_by: input.recordedBy } : {}),
       },
     },

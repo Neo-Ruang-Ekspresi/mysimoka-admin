@@ -14,6 +14,7 @@ import { useClasses, useImmunizationSessions, useMeasurementSessions, useStudent
 import { useMemberNames } from '@/hooks/useRecordHistory';
 import { HISTORY_ACTION_LABEL, type HistoryEntry } from '@/api/recordHistory';
 import type { ImmunizationRecordRow, MeasurementRecordRow } from '@/api/types';
+import { formatReferenceDiff, readReference, referenceDiff } from '@/api/measurementReference';
 import { toGrowthPoint } from '@/lib/growthReport';
 import { bmiCategory, computeBmi, NUTRITION_COLORS } from '@/lib/nutrition';
 import { formatDate, formatDateTime, formatDecimal } from '@/lib/format';
@@ -40,6 +41,19 @@ export function AttemptsBadge({ count, className }: { count: number; className?:
     <Badge tone="brand" className={className}>
       <History className="size-3" aria-hidden /> {count} percobaan
     </Badge>
+  );
+}
+
+/** Baris kecil di sel tabel: nilai pembanding + selisih (kosong bila tidak ada pembanding). */
+export function ReferenceNote({ record, kind }: { record: MeasurementRecordRow | null | undefined; kind: 'height' | 'weight' }) {
+  const ref = readReference(record);
+  const value = kind === 'height' ? ref?.heightCm : ref?.weightKg;
+  if (!ref || value == null) return null;
+  const unit = kind === 'height' ? 'cm' : 'kg';
+  return (
+    <span className="block text-xs font-normal text-fg-subtle" title="Data pembanding (selisih = hasil alat − pembanding)">
+      pemb. {formatDecimal(value, 2)} ({formatReferenceDiff(kind === 'height' ? ref.heightDiff : ref.weightDiff, unit)})
+    </span>
   );
 }
 
@@ -147,6 +161,7 @@ export function MeasurementRecordDrawer({
   const category = bmiCategory(point.bmi);
   const list = attempts ?? [];
   const lastChange = list[0]?.changedAt ?? null;
+  const reference = readReference(record);
 
   return (
     <Drawer
@@ -189,6 +204,20 @@ export function MeasurementRecordDrawer({
           <Metric label="Usia saat ukur" value={<span className="text-base">{formatAgeMonths(point.ageMonths)}</span>} hint={point.reason ?? undefined} />
         </div>
       </Section>
+
+      {reference ? (
+        <Section title="Data pembanding">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {reference.heightCm !== null ? (
+              <Metric label="Tinggi pembanding" value={`${formatDecimal(reference.heightCm, 2)} cm`} hint={`Selisih ${formatReferenceDiff(reference.heightDiff, 'cm')}`} />
+            ) : null}
+            {reference.weightKg !== null ? (
+              <Metric label="Berat pembanding" value={`${formatDecimal(reference.weightKg, 2)} kg`} hint={`Selisih ${formatReferenceDiff(reference.weightDiff, 'kg')}`} />
+            ) : null}
+          </div>
+          <p className="mt-1.5 text-xs text-fg-subtle">Selisih = hasil alat − pembanding.</p>
+        </Section>
+      ) : null}
 
       <Section title="Informasi pencatatan">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
@@ -255,6 +284,17 @@ export function MeasurementRecordDrawer({
                       </span>
                       <span>IMT {formatDecimal(bmi)}</span>
                     </p>
+                    {entry.referenceHeightCm !== null || entry.referenceWeightKg !== null ? (
+                      <p className="mt-0.5 text-xs tabular-nums text-fg-muted">
+                        Pembanding
+                        {entry.referenceHeightCm !== null
+                          ? ` · TB ${formatDecimal(entry.referenceHeightCm, 2)} cm (${formatReferenceDiff(referenceDiff(entry.heightCm, entry.referenceHeightCm), 'cm')})`
+                          : ''}
+                        {entry.referenceWeightKg !== null
+                          ? ` · BB ${formatDecimal(entry.referenceWeightKg, 2)} kg (${formatReferenceDiff(referenceDiff(entry.weightKg, entry.referenceWeightKg), 'kg')})`
+                          : ''}
+                      </p>
+                    ) : null}
                     <p className="mt-0.5 text-xs text-fg-subtle">
                       {userLabel(names, entry.recordedBy)} · {captureSourceLabel(entry.captureSource)}
                       {entry.deviceName ? ` · ${entry.deviceName}` : ''}
