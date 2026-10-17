@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Gauge, KeyRound, Pencil, TrendingDown, TrendingUp } from 'lucide-react';
+import { Gauge, KeyRound, Pencil, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
 import { useSchoolScope } from '@/scope/SchoolScope';
 import { useSchoolMutation } from '@/hooks/useSchoolData';
 import {
@@ -14,12 +14,15 @@ import {
   DEFAULT_RECALIBRATION_INTERVAL_DAYS,
   TECHNICIAN_PIN_PATTERN,
   deviceCalibrationState,
+  latestModel,
   saveGlobalTolerances,
   saveRecalibrationInterval,
   saveSchoolTolerances,
   saveTechnicianPin,
   type CalibrationExtras,
   type CalibrationKind,
+  type CalibrationModel,
+  type CalibrationModelPart,
   type SettingsTarget,
   type CalibrationRow,
   type CalibrationSettings,
@@ -60,8 +63,95 @@ function fixed(value: number | null, fractionDigits: number) {
   return value.toLocaleString('id-ID', { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
 }
 
-function kindLabel(kind: string) {
-  return CALIBRATION_KIND_LABEL[kind as CalibrationKind] ?? kind;
+function kindLabel(row: CalibrationRow) {
+  // Firmware >= 2.3: perintah berat/tinggi melatih penstabil sensor (titik regresi).
+  if (row.model && (row.kind === 'adjust_weight' || row.kind === 'adjust_height')) {
+    return row.result === 'point_deleted' ? 'Hapus titik latih' : 'Latih penstabil';
+  }
+  return CALIBRATION_KIND_LABEL[row.kind as CalibrationKind] ?? row.kind;
+}
+
+const MODEL_TYPE_LABEL: Record<CalibrationModelPart['type'], string> = {
+  regression: 'Regresi linier',
+  single: 'Offset saja',
+  default: 'Belum dilatih',
+};
+
+function ModelPartView({ measure, part }: { measure: 'weight' | 'height'; part: CalibrationModelPart }) {
+  const d = digits(measure);
+  const u = unit(measure);
+  const points = part.points ?? [];
+  const meanAbs =
+    points.length > 0 ? points.reduce((sum, point) => sum + Math.abs(point.predicted - point.reference), 0) / points.length : null;
+  return (
+    <div className="rounded-lg border border-line px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium text-fg">{measure === 'weight' ? 'Berat' : 'Tinggi'}</p>
+        <Badge tone={part.type === 'regression' ? 'success' : part.type === 'single' ? 'brand' : 'warning'}>
+          {MODEL_TYPE_LABEL[part.type] ?? part.type}
+          {points.length > 0 ? ` · ${points.length} titik` : ''}
+        </Badge>
+      </div>
+      <p className="mt-1 text-xs text-fg-subtle">
+        {part.type === 'default'
+          ? 'Alat masih memakai nilai kalibrasi lama (1 titik).'
+          : `${measure === 'weight' ? 'kg' : 'cm'} = ${part.slope.toPrecision(6)} × ${
+              measure === 'weight' ? 'hitungan sensor' : 'jarak sensor'
+            } ${part.intercept >= 0 ? '+' : '−'} ${Math.abs(part.intercept).toFixed(d)}`}
+        {meanAbs !== null ? ` · rata-rata selisih titik ±${fixed(meanAbs, d)} ${u}` : ''}
+        {part.rmse !== null && part.rmse !== undefined ? ` · RMSE ${fixed(part.rmse, d + 1)} ${u}` : ''}
+      </p>
+      {points.length > 0 ? (
+        <table className="mt-2 w-full text-left text-xs">
+          <thead className="text-fg-muted">
+            <tr>
+              <th className="py-1 pr-3 font-medium">#</th>
+              <th className="py-1 pr-3 font-medium">Acuan</th>
+              <th className="py-1 pr-3 font-medium">Hasil model</th>
+              <th className="py-1 font-medium">Selisih</th>
+            </tr>
+          </thead>
+          <tbody>
+            {points.map((point, index) => (
+              <tr key={index} className="border-t border-line">
+                <td className="py-1 pr-3">{index + 1}</td>
+                <td className="py-1 pr-3">
+                  {fixed(point.reference, d)} {u}
+                </td>
+                <td className="py-1 pr-3">
+                  {fixed(point.predicted, d)} {u}
+                </td>
+                <td className="py-1">
+                  {signed(point.predicted - point.reference, d)} {u}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+    </div>
+  );
+}
+
+/** Penstabil sensor (regresi linier, firmware >= 2.3) terakhir yang dilaporkan app. */
+function ModelCard({ model, at }: { model: CalibrationModel; at: string }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="flex items-center gap-1.5 text-sm font-semibold text-fg">
+        <Sparkles className="size-4 text-fg-subtle" />
+        Penstabil sensor (regresi linier)
+        <span className="text-xs font-normal text-fg-subtle">· per {formatDateTime(at)}</span>
+      </p>
+      <p className="text-xs text-fg-subtle">
+        Alat menghitung rumus koreksi sendiri dari titik acuan (timbangan/meteran terkalibrasi). Titik ditambah atau
+        dihapus dari aplikasi (Mode teknisi → Cek akurasi & kalibrasi) lewat Bluetooth.
+      </p>
+      <div className="grid gap-2 md:grid-cols-2">
+        <ModelPartView measure="weight" part={model.weight} />
+        <ModelPartView measure="height" part={model.height} />
+      </div>
+    </div>
+  );
 }
 
 /** Badge ringkas untuk kolom tabel perangkat: bias cek terakhir (berat, lalu tinggi). */
@@ -161,6 +251,7 @@ export function DeviceCalibrationHistory({
 }) {
   const deviceRows = device ? calibrationsForDevice(rows, device) : [];
   const summaries = latestChecks(deviceRows);
+  const trained = latestModel(deviceRows);
   return (
     <>
       {deviceRows.length === 0 ? (
@@ -174,6 +265,7 @@ export function DeviceCalibrationHistory({
           {summaries.map(summary => (
             <TrendLine key={summary.measure} summary={summary} />
           ))}
+          {trained ? <ModelCard model={trained.model} at={trained.at} /> : null}
           <div className="max-h-[50vh] overflow-auto rounded-lg border border-line">
             <table className="w-full text-left text-xs">
               <thead className="sticky top-0 bg-card-muted text-fg-muted">
@@ -197,7 +289,7 @@ export function DeviceCalibrationHistory({
                     <tr key={row.id} className="border-t border-line">
                       <td className="whitespace-nowrap px-3 py-2">{formatDateTime(row.created_at)}</td>
                       <td className="px-3 py-2">
-                        {kindLabel(row.kind)}
+                        {kindLabel(row)}
                         {row.measure ? ` (${row.measure === 'weight' ? 'berat' : 'tinggi'})` : ''}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2">
@@ -215,8 +307,16 @@ export function DeviceCalibrationHistory({
                           </Badge>
                         ) : (
                           <span title={row.previous_values ? `Sebelum: ${JSON.stringify(row.previous_values)}` : undefined}>
-                            <Badge tone={row.result === 'ok' ? 'success' : 'danger'}>{row.result}</Badge>
-                            {row.cal_factor !== null ? (
+                            <Badge tone={row.result === 'ok' || row.result === 'point_deleted' ? 'success' : 'danger'}>
+                              {row.result === 'point_deleted' ? 'dihapus' : row.result}
+                            </Badge>
+                            {row.model ? (
+                              <span className="ml-1 text-fg-subtle">
+                                {row.measure === 'height'
+                                  ? `${row.model.height.points.length} titik tinggi`
+                                  : `${row.model.weight.points.length} titik berat`}
+                              </span>
+                            ) : row.cal_factor !== null ? (
                               <span className="ml-1 text-fg-subtle">
                                 faktor {fixed(row.cal_factor, 2)}
                                 {row.previous_values?.cal_factor !== undefined

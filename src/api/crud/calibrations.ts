@@ -4,6 +4,8 @@
  *  - `device_calibrations`: log append-only. kind 'check' = cek akurasi satu titik acuan
  *    (readings, mean_value, bias, abs_error, pct_error, sd, tolerance, within_tolerance);
  *    'tare' | 'adjust_weight' | 'adjust_height' | 'reset' = perintah kalibrasi ke alat.
+ *    `model` (firmware >= 2.3): penstabil sensor (regresi linier per ukuran) sesudah perintah;
+ *    kolom bisa belum ada di server lama → query diulang tanpa kolom itu.
  *    Permission: teacher/school_admin select sekolah sendiri, super_admin select semua.
  *  - `calibration_settings`: baris sekolah (school_id) atau global (school_id NULL).
  *    school_admin insert/update baris sekolahnya, super_admin semua (termasuk global).
@@ -58,10 +60,38 @@ export type CalibrationRow = {
   result: string;
   firmware_version: string | null;
   created_at: string;
+  /** Penstabil sensor sesudah perintah (firmware >= 2.3); null di baris lama / server tanpa kolom. */
+  model?: CalibrationModel | null;
 };
+
+/** Satu ukuran dari penstabil sensor: tinggi/berat = slope × raw + intercept. */
+export type CalibrationModelPart = {
+  /** default = belum dilatih (faktor lama), single = offset saja, regression = regresi linier. */
+  type: 'default' | 'single' | 'regression';
+  slope: number;
+  intercept: number;
+  rmse: number | null;
+  /** raw = hitungan HX711 di atas tare (berat) atau jarak sensor dalam cm (tinggi). */
+  points: Array<{ raw: number; reference: number; predicted: number }>;
+};
+
+export type CalibrationModel = {
+  weight: CalibrationModelPart;
+  height: CalibrationModelPart;
+};
+
+/** Model penstabil terbaru (baris pertama yang punya model; rows terbaru dulu). */
+export function latestModel(rows: CalibrationRow[]): { model: CalibrationModel; at: string } | null {
+  for (const row of rows) {
+    if (row.model) return { model: row.model, at: row.created_at };
+  }
+  return null;
+}
 
 const CALIBRATION_FIELDS =
   'id device_id device_key ble_id device_name performed_by batch_id kind measure reference_value readings n mean_value bias abs_error pct_error sd tolerance within_tolerance zero_offset cal_factor height_offset_cm previous_values result firmware_version created_at';
+/** Kolom tambahan (server baru); dibuang bila server belum punya. */
+const CALIBRATION_LATER_FIELDS = 'model';
 
 export const CALIBRATION_LIMIT = 2000;
 
@@ -101,18 +131,26 @@ function normalizeRow(row: CalibrationRow): CalibrationRow {
 
 /** Riwayat cek/kalibrasi sekolah, terbaru dulu (maks. CALIBRATION_LIMIT). */
 export async function fetchCalibrations(schoolId: string, role: string): Promise<CalibrationsResult> {
-  try {
-    const data = await gql<{ device_calibrations: CalibrationRow[] }>(
+  const query = (fields: string) =>
+    gql<{ device_calibrations: CalibrationRow[] }>(
       `query SchoolCalibrations($schoolId: uuid!, $limit: Int!) {
         device_calibrations(
           where: { school_id: { _eq: $schoolId } }
           order_by: [{ created_at: desc }]
           limit: $limit
-        ) { ${CALIBRATION_FIELDS} }
+        ) { ${fields} }
       }`,
       { schoolId, limit: CALIBRATION_LIMIT },
       { role },
     );
+  try {
+    let data: { device_calibrations: CalibrationRow[] };
+    try {
+      data = await query(`${CALIBRATION_FIELDS} ${CALIBRATION_LATER_FIELDS}`);
+    } catch (error) {
+      if (!(error instanceof PermissionError && isFieldNotFound(error) && /'model'/.test(error.message))) throw error;
+      data = await query(CALIBRATION_FIELDS);
+    }
     return { status: 'ok', rows: data.device_calibrations.map(normalizeRow) };
   } catch (error) {
     if (!(error instanceof PermissionError)) throw error;
