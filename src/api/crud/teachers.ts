@@ -7,6 +7,8 @@
 import { gql } from '../graphql';
 import { ApiError } from '../errors';
 
+import { writeMembershipSelected } from '../school';
+
 export { addTeacher } from '../school';
 
 export type MemberRole = 'school_admin' | 'teacher' | 'school_member';
@@ -39,11 +41,8 @@ export async function updateMembership(
 
 /** Nonaktifkan = status 'inactive' (akses sekolah dicabut, data tetap). Aktifkan = status 'active'. */
 export function setMembershipEnabled(membershipId: string, enabled: boolean, role: string): Promise<void> {
-  return updateMembership(
-    membershipId,
-    enabled ? { status: 'active', isActive: true } : { status: 'inactive', isActive: false },
-    role,
-  );
+  if (!enabled) return updateMembership(membershipId, { status: 'inactive', isActive: false }, role);
+  return writeMembershipSelected(isActive => updateMembership(membershipId, { status: 'active', isActive }, role));
 }
 
 export async function deleteMembership(membershipId: string, role: string): Promise<void> {

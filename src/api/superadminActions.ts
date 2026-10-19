@@ -12,7 +12,7 @@ import { asObject, readString } from '@/lib/object';
 import { getValidAccessToken } from './auth';
 import { ApiError, NetworkError, PermissionError } from './errors';
 import { gql } from './graphql';
-import { buildJoinCode, regenerateJoinCode } from './school';
+import { buildJoinCode, regenerateJoinCode, writeMembershipSelected } from './school';
 import { getAuthSession } from './session';
 
 export const NOT_ALLOWED = 'Aksi ini belum diizinkan di server.';
@@ -155,11 +155,13 @@ export function addMembership(input: { userId: string; schoolId: string; role: M
       { role },
     );
     if (existing.school_memberships[0]) throw new ApiError('Pengguna sudah menjadi anggota sekolah ini. Ubah perannya dari daftar keanggotaan.');
-    await gql(
-      `mutation AddMembership($object: school_memberships_insert_input!) { insert_school_memberships_one(object: $object) { id } }`,
-      { object: { user_id: input.userId, school_id: input.schoolId, role: input.role, status: 'active', is_active: true } },
-      { role },
-    );
+    await writeMembershipSelected(async isActive => {
+      await gql(
+        `mutation AddMembership($object: school_memberships_insert_input!) { insert_school_memberships_one(object: $object) { id } }`,
+        { object: { user_id: input.userId, school_id: input.schoolId, role: input.role, status: 'active', is_active: isActive } },
+        { role },
+      );
+    });
   });
 }
 
@@ -171,16 +173,19 @@ export function updateMembershipAsSuper(
   const payload: Record<string, unknown> = {};
   if (set.role) payload.role = set.role;
   if (set.enabled !== undefined) Object.assign(payload, set.enabled ? { status: 'active', is_active: true } : { status: 'inactive', is_active: false });
-  return guarded(async () => {
+  const write = async (set: Record<string, unknown>) => {
     const data = await gql<{ update_school_memberships_by_pk: { id: string } | null }>(
       `mutation SuperUpdateMembership($id: uuid!, $set: school_memberships_set_input!) {
         update_school_memberships_by_pk(pk_columns: { id: $id }, _set: $set) { id }
       }`,
-      { id, set: payload },
+      { id, set },
       { role },
     );
     if (!data.update_school_memberships_by_pk?.id) throw new ApiError('Keanggotaan tidak ditemukan.');
-  });
+  };
+  return guarded(() =>
+    payload.is_active === true ? writeMembershipSelected(isActive => write({ ...payload, is_active: isActive })) : write(payload),
+  );
 }
 
 export function deleteMembershipAsSuper(id: string, role: string): Promise<void> {

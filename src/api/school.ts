@@ -680,6 +680,20 @@ async function ensureDefaultAuthRole(userId: string, roleId: string, role: strin
   );
 }
 
+/**
+ * Anggota sekolah = status 'active'; is_active = sekolah yang sedang dipilih user (DB: maks 1 per
+ * user, index school_memberships_single_active_per_user). Satu user boleh anggota banyak sekolah:
+ * bila ia sudah memilih sekolah lain, tulis ulang tanpa is_active (user memilih sendiri di app).
+ */
+export async function writeMembershipSelected(write: (isActive: boolean) => Promise<void>): Promise<void> {
+  try {
+    await write(true);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes('single_active_per_user')) throw error;
+    await write(false);
+  }
+}
+
 export async function addTeacher(
   input: { schoolId: string; email: string; fullName: string; password: string },
   role: string,
@@ -708,26 +722,31 @@ export async function addTeacher(
     { role },
   );
   const membershipId = existing.school_memberships[0]?.id;
+  const userId = user.id;
   if (membershipId) {
-    await gql(
-      `mutation UpdateTeacherMembership($membershipId: uuid!) {
-        update_school_memberships_by_pk(
-          pk_columns: { id: $membershipId }
-          _set: { role: "teacher", status: "active", is_active: true }
-        ) { id }
-      }`,
-      { membershipId },
-      { role },
-    );
+    await writeMembershipSelected(async isActive => {
+      await gql(
+        `mutation UpdateTeacherMembership($membershipId: uuid!, $isActive: Boolean!) {
+          update_school_memberships_by_pk(
+            pk_columns: { id: $membershipId }
+            _set: { role: "teacher", status: "active", is_active: $isActive }
+          ) { id }
+        }`,
+        { membershipId, isActive },
+        { role },
+      );
+    });
   } else {
-    await gql(
-      `mutation InsertTeacherMembership($userId: uuid!, $schoolId: uuid!) {
-        insert_school_memberships_one(object: {
-          user_id: $userId, school_id: $schoolId, role: "teacher", status: "active", is_active: true
-        }) { id }
-      }`,
-      { userId: user.id, schoolId: input.schoolId },
-      { role },
-    );
+    await writeMembershipSelected(async isActive => {
+      await gql(
+        `mutation InsertTeacherMembership($userId: uuid!, $schoolId: uuid!, $isActive: Boolean!) {
+          insert_school_memberships_one(object: {
+            user_id: $userId, school_id: $schoolId, role: "teacher", status: "active", is_active: $isActive
+          }) { id }
+        }`,
+        { userId, schoolId: input.schoolId, isActive },
+        { role },
+      );
+    });
   }
 }
