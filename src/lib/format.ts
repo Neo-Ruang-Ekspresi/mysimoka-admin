@@ -29,7 +29,8 @@ export function formatNumber(value: number | null | undefined): string {
   return value === null || value === undefined || !Number.isFinite(value) ? '-' : numberFormatter.format(value);
 }
 
-export function formatDecimal(value: number | null | undefined, digits = 1): string {
+/** Maks. 2 desimal (tinggi/berat disimpan numeric(5,2)); nol di belakang tidak ditampilkan. */
+export function formatDecimal(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '-';
   return value.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: digits });
 }
