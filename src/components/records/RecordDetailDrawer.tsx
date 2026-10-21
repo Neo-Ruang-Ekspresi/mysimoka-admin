@@ -17,7 +17,7 @@ import type { ImmunizationRecordRow, MeasurementRecordRow } from '@/api/types';
 import { formatReferenceDiff, readReference, referenceDiff } from '@/api/measurementReference';
 import { toGrowthPoint } from '@/lib/growthReport';
 import { bmiCategory, computeBmi, NUTRITION_COLORS } from '@/lib/nutrition';
-import { formatDate, formatDateTime, formatDecimal } from '@/lib/format';
+import { formatDate, formatDateTime, formatDecimal, genderLabel } from '@/lib/format';
 import { captureMethodLabel, captureSourceLabel, userLabel } from '@/lib/records';
 import { cn } from '@/lib/object';
 import { Badge, ImmunizationStatusBadge, type Tone } from '@/components/ui/Badge';
@@ -213,6 +213,11 @@ export function MeasurementRecordDrawer({
             label={infoLabel('BB/U', 'weight')}
             value={<WeightStatusBadge status={point.weightStatus} reason={point.weightReason} />}
             hint={point.wfaZ !== null ? `z ${formatZ(point.wfaZ)}` : (point.weightReason ?? undefined)}
+          />
+          <Metric
+            label="Jenis kelamin"
+            value={<span className="text-base">{genderLabel(student.gender)}</span>}
+            hint={sex ? undefined : 'Kosong: z-score tidak dihitung'}
           />
           <Metric label="Usia saat ukur" value={<span className="text-base">{formatAgeMonths(point.ageMonths)}</span>} hint={point.reason ?? undefined} />
         </div>

@@ -12,7 +12,7 @@ import { deleteRecord, deleteRecords } from '@/api/crud/records';
 import { readReference } from '@/api/measurementReference';
 import type { ImmunizationRecordRow, ImmunizationRecordStatus, MeasurementRecordRow, SessionStatus } from '@/api/types';
 import { toMeasurementView, type MeasurementView } from '@/lib/analytics';
-import { formatDate, formatDateTime, formatDecimal, formatNumber, formatPercent } from '@/lib/format';
+import { formatDate, formatDateTime, formatDecimal, formatNumber, formatPercent, genderLabel } from '@/lib/format';
 import { downloadCsv, slugify } from '@/lib/csv';
 import { NUTRITION_COLORS } from '@/lib/nutrition';
 import { Card, CardBody } from '@/components/ui/Card';
@@ -36,6 +36,7 @@ type RosterRow = {
   enrollmentId: string | null;
   name: string;
   studentNumber: string | null;
+  gender: string | null;
   inRoster: boolean;
   measurement: MeasurementView | null;
   immunization: ImmunizationRecordRow | null;
@@ -86,6 +87,7 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
         enrollmentId: item.enrollmentId,
         name: item.student.full_name,
         studentNumber: item.student.student_number,
+        gender: item.student.gender ?? null,
         inRoster: true,
       }),
     );
@@ -101,6 +103,7 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
           enrollmentId: record.student_enrollment_id,
           name: student?.student.full_name ?? `Siswa ${record.student_id.slice(0, 8)}`,
           studentNumber: student?.student.student_number ?? null,
+          gender: student?.student.gender ?? null,
           inRoster: false,
         }),
       );
@@ -248,7 +251,7 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
         <div>
           <p className="font-medium text-fg">{row.name}</p>
           <p className="text-xs text-fg-subtle">
-            NISN {row.studentNumber ?? '-'}
+            NISN {row.studentNumber ?? '-'} · {genderLabel(row.gender)}
             {!row.inRoster ? ' · tidak lagi di kelas ini' : ''}
           </p>
         </div>
@@ -306,6 +309,7 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
     downloadCsv(`${meta.path}-${slugify(session.name)}-${slugify(schoolName)}`, roster, [
       { header: 'Nama', value: row => row.name },
       { header: 'NISN', value: row => row.studentNumber },
+      { header: 'Jenis kelamin', value: row => genderLabel(row.gender) },
       { header: 'Kelas', value: () => className },
       ...(kind === 'measurement'
         ? [
