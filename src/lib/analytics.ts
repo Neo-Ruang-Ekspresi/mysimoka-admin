@@ -12,6 +12,17 @@ import { monthKey, parseDate } from './format';
 import { readNumber } from './object';
 import { isConnectedMembershipStatus, normalizeRoleKey } from './roles';
 import { computeBmi, NUTRITION_CATEGORIES, nutritionStatus, type NutritionCategory, type NutritionSubject } from './nutrition';
+import {
+  ageInMonths,
+  bmiForAgeZ,
+  heightForAgeZ,
+  heightStatus,
+  normalizeSex,
+  weightForAgeZ,
+  weightStatus,
+  type HeightStatus,
+  type WeightStatus,
+} from './growth';
 
 export type Period = { start: string | null; end: string | null; label: string };
 
@@ -69,14 +80,35 @@ export type MeasurementView = {
   bmi: number | null;
   /** Status gizi (IMT/U WHO 2007 untuk anak; lihat nutrition.ts); null = tidak dihitung. */
   category: NutritionCategory | null;
+  /** z-score WHO 2007 (null di luar rentang usia / data kurang); BB/U hanya 5–10 th. */
+  bmiZ: number | null;
+  hfaZ: number | null;
+  wfaZ: number | null;
+  heightStatus: HeightStatus | null;
+  weightStatus: WeightStatus | null;
 };
 
-/** `student` (JK + tanggal lahir) dibutuhkan untuk status gizi anak; tanpa itu category = null. */
+/** `student` (JK + tanggal lahir) dibutuhkan untuk status gizi & z-score anak; tanpa itu = null. */
 export function toMeasurementView(record: MeasurementRecordRow, student?: NutritionSubject | null): MeasurementView {
   const heightCm = readNumber(record.height_cm);
   const weightKg = readNumber(record.weight_kg);
   const bmi = computeBmi(heightCm, weightKg);
-  return { record, heightCm, weightKg, bmi, category: nutritionStatus(bmi, student, record.measured_at) };
+  const sex = normalizeSex(student?.gender);
+  const months = student ? ageInMonths(student.date_of_birth, record.measured_at) : null;
+  const hfaZ = heightForAgeZ(heightCm, sex, months);
+  const wfaZ = weightForAgeZ(weightKg, sex, months);
+  return {
+    record,
+    heightCm,
+    weightKg,
+    bmi,
+    category: nutritionStatus(bmi, student, record.measured_at),
+    bmiZ: bmiForAgeZ(bmi, sex, months),
+    hfaZ,
+    wfaZ,
+    heightStatus: heightStatus(hfaZ),
+    weightStatus: weightStatus(wfaZ),
+  };
 }
 
 /** Record terakhir per siswa (berdasarkan measured_at). */

@@ -272,42 +272,47 @@ export function MeasureLineChart({
   );
 }
 
-export type ReferenceRow = { months: number; sd: Record<-3 | -2 | 0 | 2 | 3, number> };
+type SdKey = -3 | -2 | -1 | 0 | 1 | 2 | 3;
+export type ReferenceRow = { months: number; sd: Record<SdKey, number> };
+export type ReferenceZone = { from: SdKey; to: SdKey; label: string; color: string };
 
-const SD_LINES: Array<{ key: -3 | -2 | 0 | 2 | 3; label: string; color: string; dash?: string }> = [
+const SD_LINES: Array<{ key: SdKey; label: string; color: string; dash?: string }> = [
   { key: 3, label: '+3 SD', color: '#8E44AD', dash: '4 4' },
   { key: 2, label: '+2 SD', color: '#4F86E8', dash: '4 4' },
+  { key: 1, label: '+1 SD', color: '#7FA7EE', dash: '2 4' },
   { key: 0, label: 'Median', color: '#2A9D8F' },
+  { key: -1, label: '−1 SD', color: '#D9A55B', dash: '2 4' },
   { key: -2, label: '−2 SD', color: '#C8841F', dash: '4 4' },
   { key: -3, label: '−3 SD', color: '#C0392B', dash: '4 4' },
 ];
 
-/** Titik siswa di atas kurva referensi WHO 2007 (sumbu-x usia). */
+/**
+ * Titik siswa di atas kurva referensi WHO 2007 (sumbu-x usia), garis −3…+3 SD seperti grafik
+ * resmi WHO; `zones` mewarnai area kategori Permenkes di antara garis.
+ */
 export function ReferenceBandChart({
   curve,
   points,
   unit,
   name,
+  zones = [],
 }: {
   curve: ReferenceRow[];
   points: Array<{ months: number; value: number; date: string }>;
   unit: string;
   name: string;
+  zones?: ReferenceZone[];
 }) {
   const anim = useChartAnimation();
   if (points.length === 0 || curve.length === 0) {
     return <EmptyState title="Belum ada titik yang bisa diplot" description="Butuh pengukuran pada usia 5–19 th dengan tanggal lahir & jenis kelamin terisi." />;
   }
+  const keyOf = (key: number) => (key < 0 ? `sdm${-key}` : `sd${key}`);
   const data = curve.map(row => ({
     months: row.months,
-    band: [row.sd[-2], row.sd[2]] as [number, number],
-    sdm3: row.sd[-3],
-    sdm2: row.sd[-2],
-    sd0: row.sd[0],
-    sd2: row.sd[2],
-    sd3: row.sd[3],
+    ...Object.fromEntries(SD_LINES.map(line => [keyOf(line.key), row.sd[line.key]])),
+    ...Object.fromEntries(zones.map((zone, index) => [`zone${index}`, [row.sd[zone.from], row.sd[zone.to]]])),
   }));
-  const keyOf = (key: number) => (key < 0 ? `sdm${-key}` : `sd${key}`);
   const minX = curve[0].months;
   const maxX = curve[curve.length - 1].months;
   return (
@@ -329,7 +334,18 @@ export function ReferenceBandChart({
           formatter={(value, label) => (Array.isArray(value) ? [null, null] : [`${formatDecimal(Number(value))} ${unit}`, label])}
         />
         <Legend {...LEGEND_PROPS} />
-        <Area dataKey="band" name="Rentang −2…+2 SD" fill="#2A9D8F" fillOpacity={0.1} stroke="none" legendType="none" {...anim} />
+        {zones.map((zone, index) => (
+          <Area
+            key={`zone${index}`}
+            dataKey={`zone${index}`}
+            name={zone.label}
+            fill={zone.color}
+            fillOpacity={0.12}
+            stroke="none"
+            legendType="square"
+            {...anim}
+          />
+        ))}
         {SD_LINES.map(line => (
           <Line
             key={line.key}

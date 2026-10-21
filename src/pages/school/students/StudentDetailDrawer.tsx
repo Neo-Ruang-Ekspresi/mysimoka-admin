@@ -36,6 +36,7 @@ import { RowActions } from '@/components/ui/RowActions';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
+import { formatZ } from '@/pages/school/reports/shared';
 
 const ENROLLMENT_TONE: Record<string, Tone> = { active: 'success', inactive: 'neutral', graduated: 'brand', transferred: 'warning' };
 
@@ -412,6 +413,12 @@ export function StudentDetailDrawer({
                           </td>
                           <td className="px-3 py-2 tabular-nums">
                             {formatDecimal(item.bmi)} {item.category ? <span className="text-xs text-fg-subtle">· {item.category}</span> : null}
+                            {item.bmiZ !== null ? (
+                              <span className="block text-xs text-fg-subtle">
+                                z IMT/U {formatZ(item.bmiZ)}
+                                {item.hfaZ !== null ? ` · z TB/U ${formatZ(item.hfaZ)}` : ''}
+                              </span>
+                            ) : null}
                           </td>
                           <td className="px-3 py-2">
                             {count > 1 ? <AttemptsBadge count={count} /> : <span className="text-xs text-fg-subtle">{mAttempts.available ? '1' : '-'}</span>}

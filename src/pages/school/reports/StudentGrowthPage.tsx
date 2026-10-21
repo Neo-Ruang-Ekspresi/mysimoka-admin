@@ -11,7 +11,7 @@ import { attemptKey } from '@/api/recordHistory';
 import type { ImmunizationRecordRow, MeasurementRecordRow } from '@/api/types';
 import { AttemptsBadge, ImmunizationRecordDrawer, MeasurementRecordDrawer, ReferenceNote } from '@/components/records/RecordDetailDrawer';
 import { toGrowthPoint, type GrowthPoint } from '@/lib/growthReport';
-import { normalizeSex, referenceCurve } from '@/lib/growth';
+import { normalizeSex, referenceAgeRange, referenceCurve, REFERENCE_ZONES } from '@/lib/growth';
 import { formatDate, formatDecimal, genderLabel, initials } from '@/lib/format';
 import { staggerContainer, staggerItem } from '@/lib/motion';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -41,6 +41,8 @@ export function StudentGrowthPage() {
   const students = useStudents();
   const history = useStudentHistory(studentId);
   const [refTab, setRefTab] = useState<RefTab>('bmi');
+  // Seperti grafik resmi WHO: seluruh rentang usia (5–19 th; BB/U 5–10 th) atau hanya sekitar data siswa.
+  const [fullRange, setFullRange] = useState(false);
   const mAttempts = useStudentAttempts('measurement', studentId);
   const iAttempts = useStudentAttempts('immunization', studentId);
   const mViewer = useDrawerState<MeasurementRecordRow>();
@@ -66,8 +68,9 @@ export function StudentGrowthPage() {
     const plotted = points.filter(point => point.ageMonths !== null && tab.z(point) !== null);
     if (!sex || plotted.length === 0) return { curve: [], points: [] };
     const ages = plotted.map(point => point.ageMonths!);
-    const from = Math.min(...ages) - 6;
-    const to = Math.max(...ages) + 6;
+    const range = referenceAgeRange(refTab);
+    const from = fullRange ? range.from : Math.min(...ages) - 6;
+    const to = fullRange ? range.to : Math.max(...ages) + 6;
     return {
       curve: referenceCurve(refTab, sex, from, to),
       points: plotted.map(point => ({
@@ -76,7 +79,7 @@ export function StudentGrowthPage() {
         date: point.date,
       })),
     };
-  }, [points, refTab, sex]);
+  }, [fullRange, points, refTab, sex]);
 
   const immunizations = history.immunizations ?? [];
   const loading = students.isLoading || history.isLoading;
@@ -172,7 +175,7 @@ export function StudentGrowthPage() {
                 Posisi terhadap referensi WHO 2007 <ReferenceInfo indicator={refTab} sex={sex} months={latest?.ageMonths ?? null} />
               </span>
             }
-            description="Titik siswa di atas kurva −3, −2, median, +2, +3 SD (sumbu-x: usia)."
+            description="Titik siswa di atas kurva −3…+3 SD WHO; warna = kategori Permenkes 2/2020 (sumbu-x: usia)."
             actions={
               <Tabs<RefTab>
                 ariaLabel="Indikator referensi"
@@ -188,11 +191,21 @@ export function StudentGrowthPage() {
             }
           />
           <CardBody>
+            <label className="mb-2 flex items-center justify-end gap-2 text-xs text-fg-subtle">
+              <input
+                type="checkbox"
+                checked={fullRange}
+                onChange={event => setFullRange(event.target.checked)}
+                className="size-3.5 accent-brand-500"
+              />
+              Tampilkan seluruh rentang usia ({refTab === 'weight' ? '5–10' : '5–19'} th)
+            </label>
             <ReferenceBandChart
               curve={reference.curve}
               points={reference.points}
               unit={REF_TAB[refTab].unit}
               name={REF_TAB[refTab].name}
+              zones={REFERENCE_ZONES[refTab]}
             />
             <MethodNote>
               Kurva dari parameter LMS WHO Growth Reference 2007 (5–19 th; BB/U hanya 5–10 th). Pengukuran sebelum usia 5 th

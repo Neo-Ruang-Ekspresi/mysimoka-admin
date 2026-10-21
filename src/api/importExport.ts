@@ -28,7 +28,8 @@ import type {
   MeasurementRecordRow,
   MeasurementSessionRow,
 } from './types';
-import { buildStudents, inPeriod, toMeasurementView, type StudentView } from '@/lib/analytics';
+import { HEIGHT_STATUS_LABEL, WEIGHT_STATUS_LABEL } from '@/lib/growth';
+import { buildStudents, inPeriod, toMeasurementView, type MeasurementView, type StudentView } from'@/lib/analytics';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { dateCell, dateTimeCell, numberCell, type CellValue, type SheetSpec } from '@/lib/excel';
 import type { ParsedStudentRow } from '@/lib/studentImport';
@@ -287,6 +288,25 @@ function referenceCells(record: MeasurementRecordRow | null): CellValue[] {
   return [numberCell(ref?.weightKg, 2), numberCell(ref?.heightCm, 2), signedCell(ref?.weightDiff), signedCell(ref?.heightDiff)];
 }
 
+/** Status + z-score WHO 2007 / Permenkes 2/2020 setelah kolom "Status gizi" (IMT/U). */
+const GROWTH_COLUMNS = [
+  { header: 'z IMT/U', width: 9 },
+  { header: 'TB/U', width: 13 },
+  { header: 'z TB/U', width: 9 },
+  { header: 'BB/U (5–10 th)', width: 15 },
+  { header: 'z BB/U', width: 9 },
+];
+
+function growthCells(view: MeasurementView | null): CellValue[] {
+  return [
+    numberCell(view?.bmiZ, 2),
+    view?.heightStatus ? HEIGHT_STATUS_LABEL[view.heightStatus] : '',
+    numberCell(view?.hfaZ, 2),
+    view?.weightStatus ? WEIGHT_STATUS_LABEL[view.weightStatus] : '',
+    numberCell(view?.wfaZ, 2),
+  ];
+}
+
 const MEASUREMENT_COLUMNS = [
   { header: 'No', width: 5 },
   { header: 'NIS', width: 16, text: true },
@@ -296,7 +316,8 @@ const MEASUREMENT_COLUMNS = [
   { header: 'Tinggi (cm)', width: 12 },
   { header: 'Berat (kg)', width: 12 },
   { header: 'IMT', width: 8 },
-  { header: 'Status gizi', width: 12 },
+  { header: 'Status gizi (IMT/U)', width: 18 },
+  ...GROWTH_COLUMNS,
   ...REFERENCE_COLUMNS,
   { header: 'Metode', width: 18 },
   { header: 'Waktu', width: 18 },
@@ -335,10 +356,11 @@ function measurementRows(
       item.student?.student.full_name ?? `Siswa ${item.studentId.slice(0, 8)}`,
       item.inRoster ? fallbackClass : item.student?.className ?? '',
       genderShort(item.student?.student.gender),
-      numberCell(view?.heightCm),
-      numberCell(view?.weightKg),
+      numberCell(view?.heightCm, 2),
+      numberCell(view?.weightKg, 2),
       numberCell(view?.bmi),
       view?.category ?? (record ? '' : 'Belum diukur'),
+      ...growthCells(view),
       ...referenceCells(record),
       record ? CAPTURE_LABEL[record.capture_source] ?? record.capture_source : '',
       dateTimeCell(record?.measured_at),
@@ -550,10 +572,11 @@ export async function buildRecapExport(
         session?.name ?? '-',
         dateCell(session?.session_date),
         ...studentCells(record.student_id),
-        numberCell(view.heightCm),
-        numberCell(view.weightKg),
+        numberCell(view.heightCm, 2),
+        numberCell(view.weightKg, 2),
         numberCell(view.bmi),
         view.category ?? '',
+        ...growthCells(view),
         ...referenceCells(record),
         CAPTURE_LABEL[record.capture_source] ?? record.capture_source,
         dateTimeCell(record.measured_at),
@@ -627,7 +650,8 @@ export async function buildRecapExport(
         { header: 'Tinggi (cm)', width: 12 },
         { header: 'Berat (kg)', width: 12 },
         { header: 'IMT', width: 8 },
-        { header: 'Status gizi', width: 12 },
+        { header: 'Status gizi (IMT/U)', width: 18 },
+        ...GROWTH_COLUMNS,
         ...REFERENCE_COLUMNS,
         { header: 'Metode', width: 18 },
         { header: 'Waktu', width: 18 },

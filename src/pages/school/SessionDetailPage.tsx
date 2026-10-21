@@ -15,6 +15,8 @@ import { toMeasurementView, type MeasurementView } from '@/lib/analytics';
 import { formatDate, formatDateTime, formatDecimal, formatNumber, formatPercent, genderLabel } from '@/lib/format';
 import { downloadCsv, slugify } from '@/lib/csv';
 import { NUTRITION_COLORS } from '@/lib/nutrition';
+import { HEIGHT_STATUS_LABEL, WEIGHT_STATUS_LABEL } from '@/lib/growth';
+import { formatZ, HeightStatusBadge } from '@/pages/school/reports/shared';
 import { Card, CardBody } from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, FilterSelect, type Column } from '@/components/ui/DataTable';
@@ -205,6 +207,31 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
             <span className="size-2 rounded-full" style={{ background: NUTRITION_COLORS[row.measurement.category] }} aria-hidden />
             {formatDecimal(row.measurement.bmi)} · {row.measurement.category}
           </span>
+        ) : row.measurement?.bmi != null ? (
+          <span title="Lengkapi tanggal lahir & jenis kelamin (usia 5–19 th) agar status dihitung">
+            {formatDecimal(row.measurement.bmi)} · <span className="text-xs text-fg-subtle">tidak dihitung</span>
+          </span>
+        ) : (
+          '-'
+        ),
+    },
+    {
+      key: 'bmiz',
+      header: 'z IMT/U',
+      sortValue: row => row.measurement?.bmiZ ?? null,
+      cell: row => formatZ(row.measurement?.bmiZ),
+      className: 'tabular-nums',
+    },
+    {
+      key: 'hfa',
+      header: 'TB/U',
+      sortValue: row => row.measurement?.hfaZ ?? null,
+      cell: row =>
+        row.measurement?.heightStatus ? (
+          <span className="inline-flex items-center gap-1.5">
+            <HeightStatusBadge status={row.measurement.heightStatus} />
+            <span className="text-xs tabular-nums text-fg-subtle">z {formatZ(row.measurement.hfaZ)}</span>
+          </span>
         ) : (
           '-'
         ),
@@ -322,7 +349,18 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
             { header: 'Tinggi (cm)', value: (row: RosterRow) => row.measurement?.heightCm },
             { header: 'Berat (kg)', value: (row: RosterRow) => row.measurement?.weightKg },
             { header: 'IMT', value: (row: RosterRow) => (row.measurement?.bmi ? row.measurement.bmi.toFixed(1) : '') },
-            { header: 'Status Gizi', value: (row: RosterRow) => row.measurement?.category },
+            { header: 'Status Gizi (IMT/U)', value: (row: RosterRow) => row.measurement?.category },
+            { header: 'z IMT/U', value: (row: RosterRow) => row.measurement?.bmiZ?.toFixed(2) },
+            {
+              header: 'TB/U',
+              value: (row: RosterRow) => (row.measurement?.heightStatus ? HEIGHT_STATUS_LABEL[row.measurement.heightStatus] : ''),
+            },
+            { header: 'z TB/U', value: (row: RosterRow) => row.measurement?.hfaZ?.toFixed(2) },
+            {
+              header: 'BB/U (5–10 th)',
+              value: (row: RosterRow) => (row.measurement?.weightStatus ? WEIGHT_STATUS_LABEL[row.measurement.weightStatus] : ''),
+            },
+            { header: 'z BB/U', value: (row: RosterRow) => row.measurement?.wfaZ?.toFixed(2) },
             { header: 'Berat pembanding (kg)', value: (row: RosterRow) => readReference(row.measurement?.record)?.weightKg },
             { header: 'Tinggi pembanding (cm)', value: (row: RosterRow) => readReference(row.measurement?.record)?.heightCm },
             { header: 'Selisih berat (kg)', value: (row: RosterRow) => readReference(row.measurement?.record)?.weightDiff },

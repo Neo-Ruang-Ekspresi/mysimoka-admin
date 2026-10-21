@@ -245,15 +245,40 @@ export function referenceLms(indicator: GrowthIndicator, sex: Sex | null, months
   return lmsAt(indicator === 'bmi' ? BMI_FOR_AGE[sex] : HEIGHT_FOR_AGE[sex], months);
 }
 
-/** Kurva referensi SD (−3, −2, 0, +2, +3) untuk rentang usia (bulan). */
-export const REFERENCE_SDS = [-3, -2, 0, 2, 3] as const;
+/** Kurva referensi SD −3…+3 (seperti grafik resmi WHO) untuk rentang usia (bulan). */
+export const REFERENCE_SDS = [-3, -2, -1, 0, 1, 2, 3] as const;
+export type ReferenceSd = (typeof REFERENCE_SDS)[number];
+
+/** Rentang usia penuh indikator (bulan): WHO 2007 5–19 th, BB/U 5–10 th. */
+export function referenceAgeRange(indicator: GrowthIndicator): { from: number; to: number } {
+  return { from: WHO2007_MIN_MONTH, to: indicator === 'weight' ? WFA_MAX_MONTH : WHO2007_MAX_MONTH };
+}
+
+/** Zona kategori Permenkes 2/2020 di antara garis SD (untuk pewarnaan grafik). */
+export const REFERENCE_ZONES: Record<GrowthIndicator, Array<{ from: ReferenceSd; to: ReferenceSd; label: string; color: string }>> = {
+  bmi: [
+    { from: -3, to: -2, label: 'Gizi kurang', color: BMI_STATUS_COLORS.gizi_kurang },
+    { from: -2, to: 1, label: 'Gizi baik', color: BMI_STATUS_COLORS.gizi_baik },
+    { from: 1, to: 2, label: 'Gizi lebih', color: BMI_STATUS_COLORS.gizi_lebih },
+    { from: 2, to: 3, label: 'Obesitas', color: BMI_STATUS_COLORS.obesitas },
+  ],
+  height: [
+    { from: -3, to: -2, label: 'Pendek', color: HEIGHT_STATUS_COLORS.pendek },
+    { from: -2, to: 3, label: 'Normal', color: HEIGHT_STATUS_COLORS.normal },
+  ],
+  weight: [
+    { from: -3, to: -2, label: 'BB kurang', color: WEIGHT_STATUS_COLORS.kurang },
+    { from: -2, to: 1, label: 'BB normal', color: WEIGHT_STATUS_COLORS.normal },
+    { from: 1, to: 3, label: 'Risiko BB lebih', color: WEIGHT_STATUS_COLORS.risiko_lebih },
+  ],
+};
 
 export function referenceCurve(
   indicator: GrowthIndicator,
   sex: Sex,
   fromMonth: number,
   toMonth: number,
-): Array<{ months: number; sd: Record<(typeof REFERENCE_SDS)[number], number> }> {
+): Array<{ months: number; sd: Record<ReferenceSd, number> }> {
   const table = indicator === 'bmi' ? BMI_FOR_AGE[sex] : indicator === 'height' ? HEIGHT_FOR_AGE[sex] : WEIGHT_FOR_AGE[sex];
   const start = Math.max(WHO2007_MIN_MONTH, Math.floor(fromMonth));
   const end = Math.min(indicator === 'weight' ? WFA_MAX_MONTH : WHO2007_MAX_MONTH, Math.ceil(toMonth));
@@ -263,13 +288,7 @@ export function referenceCurve(
     if (!lms) continue;
     rows.push({
       months: month,
-      sd: {
-        [-3]: valueAtZ(lms, -3),
-        [-2]: valueAtZ(lms, -2),
-        0: lms[1],
-        2: valueAtZ(lms, 2),
-        3: valueAtZ(lms, 3),
-      } as Record<(typeof REFERENCE_SDS)[number], number>,
+      sd: Object.fromEntries(REFERENCE_SDS.map(z => [z, z === 0 ? lms[1] : valueAtZ(lms, z)])) as Record<ReferenceSd, number>,
     });
   }
   return rows;
