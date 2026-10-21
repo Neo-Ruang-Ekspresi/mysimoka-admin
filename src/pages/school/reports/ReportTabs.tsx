@@ -20,7 +20,18 @@ import {
   type StatusItem,
 } from '@/components/charts/ReportCharts';
 import { SERIES } from '@/components/charts/Charts';
-import { BmiStatusBadge, bmiStatusItems, formatAgeMonths, formatZ, HeightStatusBadge, heightStatusItems, MethodNote } from './shared';
+import { ReferenceInfo } from '@/components/growth/ReferenceInfo';
+import {
+  BmiStatusBadge,
+  bmiStatusItems,
+  formatAgeMonths,
+  formatZ,
+  HeightStatusBadge,
+  heightStatusItems,
+  MethodNote,
+  WeightStatusBadge,
+  weightStatusItems,
+} from './shared';
 
 const BMI_SERIES: StackSeries[] = [
   ...BMI_STATUSES.map(key => ({ key, label: BMI_STATUS_LABEL[key], color: BMI_STATUS_COLORS[key] })),
@@ -97,6 +108,12 @@ export function NutritionTab({ report }: { report: GrowthReport }) {
       },
       { key: 'hfaz', header: 'z TB/U', sortValue: row => row.latest?.hfaZ ?? null, cell: row => formatZ(row.latest?.hfaZ), className: 'tabular-nums' },
       { key: 'hfas', header: 'TB/U', cell: row => <HeightStatusBadge status={row.latest?.heightStatus ?? null} /> },
+      { key: 'wfaz', header: 'z BB/U', sortValue: row => row.latest?.wfaZ ?? null, cell: row => formatZ(row.latest?.wfaZ), className: 'tabular-nums' },
+      {
+        key: 'wfas',
+        header: 'BB/U',
+        cell: row => <WeightStatusBadge status={row.latest?.weightStatus ?? null} reason={row.latest?.weightReason} />,
+      },
     ],
     [basePath],
   );
@@ -135,15 +152,30 @@ export function NutritionTab({ report }: { report: GrowthReport }) {
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Status gizi (IMT/U)" description="Pengukuran terakhir tiap siswa dalam periode." />
+          <CardHeader
+            title={<span className="inline-flex items-center gap-1">Status gizi (IMT/U) <ReferenceInfo indicator="bmi" /></span>}
+            description="Pengukuran terakhir tiap siswa dalam periode."
+          />
           <CardBody>
             <StatusDonut items={bmiStatusItems(report.bmi)} centerLabel="siswa terukur" emptyTitle="Belum ada pengukuran" />
           </CardBody>
         </Card>
         <Card>
-          <CardHeader title="Tinggi badan menurut umur (TB/U)" description="Indikator stunting dari pengukuran terakhir." />
+          <CardHeader
+            title={<span className="inline-flex items-center gap-1">Tinggi badan menurut umur (TB/U) <ReferenceInfo indicator="height" /></span>}
+            description="Indikator stunting dari pengukuran terakhir."
+          />
           <CardBody>
             <StatusDonut items={heightStatusItems(report.height)} centerLabel="siswa terukur" emptyTitle="Belum ada pengukuran" />
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader
+            title={<span className="inline-flex items-center gap-1">Berat badan menurut umur (BB/U) <ReferenceInfo indicator="weight" /></span>}
+            description="Informasi tambahan, hanya usia 5–10 th. Status gizi tetap IMT/U."
+          />
+          <CardBody>
+            <StatusDonut items={weightStatusItems(report.weight)} centerLabel="siswa terukur" emptyTitle="Belum ada pengukuran" />
           </CardBody>
         </Card>
       </div>
@@ -178,9 +210,10 @@ export function NutritionTab({ report }: { report: GrowthReport }) {
 
       <MethodNote>
         Z-score dihitung dengan referensi WHO Growth Reference 2007 (5–19 th; parameter LMS bulanan, interpolasi usia,
-        koreksi z &gt; |3| untuk IMT/U seperti paket resmi WHO <i>anthroplus</i>). Kategori mengikuti Permenkes No. 2/2020:
+        koreksi z &gt; |3| untuk IMT/U dan BB/U seperti paket resmi WHO <i>anthroplus</i>). Kategori mengikuti Permenkes No. 2/2020:
         gizi buruk z &lt; −3, gizi kurang −3 s.d. &lt; −2, gizi baik −2 s.d. +1, gizi lebih &gt; +1 s.d. +2, obesitas &gt; +2;
-        TB/U pendek z &lt; −2, sangat pendek z &lt; −3. Usia &lt; 5 th (standar WHO 2006) dan data tanpa tanggal lahir/jenis
+        TB/U pendek z &lt; −2, sangat pendek z &lt; −3; BB/U (hanya 5–10 th, informasi tambahan) sangat kurang z &lt; −3,
+        kurang −3 s.d. &lt; −2, normal −2 s.d. +1, risiko lebih &gt; +1. Usia &lt; 5 th (standar WHO 2006) dan data tanpa tanggal lahir/jenis
         kelamin tidak dihitung. Prevalensi = jumlah kategori / siswa dengan z-score terhitung.
       </MethodNote>
     </div>

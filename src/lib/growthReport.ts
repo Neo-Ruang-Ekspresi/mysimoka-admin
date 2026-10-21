@@ -26,8 +26,13 @@ import {
   heightStatus,
   normalizeSex,
   notComputedReason,
+  WEIGHT_STATUSES,
+  weightForAgeZ,
+  weightNotComputedReason,
+  weightStatus,
   type BmiStatus,
   type HeightStatus,
+  type WeightStatus,
 } from './growth';
 
 export type ReportFilters = {
@@ -51,10 +56,15 @@ export type GrowthPoint = {
   bmi: number | null;
   bmiZ: number | null;
   hfaZ: number | null;
+  /** BB/U (hanya 5–10 th). */
+  wfaZ: number | null;
   bmiStatus: BmiStatus | null;
   heightStatus: HeightStatus | null;
+  weightStatus: WeightStatus | null;
   /** Alasan z-score tidak dihitung (null bila dihitung). */
   reason: string | null;
+  /** Alasan BB/U tidak dihitung (mis. usia > 10 th). */
+  weightReason: string | null;
 };
 
 export function toGrowthPoint(record: MeasurementRecordRow, student: Pick<StudentRow, 'gender' | 'date_of_birth'>): GrowthPoint {
@@ -65,6 +75,7 @@ export function toGrowthPoint(record: MeasurementRecordRow, student: Pick<Studen
   const bmi = computeBmi(heightCm, weightKg);
   const bmiZ = bmiForAgeZ(bmi, sex, months);
   const hfaZ = heightForAgeZ(heightCm, sex, months);
+  const wfaZ = weightForAgeZ(weightKg, sex, months);
   return {
     record,
     date: record.measured_at,
@@ -74,9 +85,12 @@ export function toGrowthPoint(record: MeasurementRecordRow, student: Pick<Studen
     bmi,
     bmiZ,
     hfaZ,
+    wfaZ,
     bmiStatus: bmiStatus(bmiZ),
     heightStatus: heightStatus(hfaZ),
+    weightStatus: weightStatus(wfaZ),
     reason: notComputedReason(sex, months) ?? (bmi === null ? 'Tinggi/berat kosong' : null),
+    weightReason: weightNotComputedReason(sex, months) ?? (weightKg === null ? 'Berat kosong' : null),
   };
 }
 
@@ -157,6 +171,8 @@ export type GrowthReport = {
   computedStudents: number;
   bmi: StatusCounts<BmiStatus>;
   height: StatusCounts<HeightStatus>;
+  /** BB/U; notComputed termasuk siswa > 10 th. */
+  weight: StatusCounts<WeightStatus>;
   stuntingPrevalence: number | null;
   thinPrevalence: number | null;
   overPrevalence: number | null;
@@ -248,6 +264,7 @@ export function computeGrowthReport(input: ReportInput): GrowthReport {
 
   const bmi = emptyCounts(BMI_STATUSES);
   const height = emptyCounts(HEIGHT_STATUSES);
+  const weight = emptyCounts(WEIGHT_STATUSES);
   const bmiZs: number[] = [];
   const hfaZs: number[] = [];
   for (const point of latestByStudent.values()) {
@@ -255,6 +272,8 @@ export function computeGrowthReport(input: ReportInput): GrowthReport {
     else bmi.notComputed += 1;
     if (point.heightStatus) height[point.heightStatus] += 1;
     else height.notComputed += 1;
+    if (point.weightStatus) weight[point.weightStatus] += 1;
+    else weight.notComputed += 1;
     if (point.bmiZ !== null) bmiZs.push(point.bmiZ);
     if (point.hfaZ !== null) hfaZs.push(point.hfaZ);
   }
@@ -419,6 +438,7 @@ export function computeGrowthReport(input: ReportInput): GrowthReport {
     computedStudents: computedBmi,
     bmi,
     height,
+    weight,
     stuntingPrevalence: computedHfa > 0 ? (height.pendek + height.sangat_pendek) / computedHfa : null,
     thinPrevalence: computedBmi > 0 ? (bmi.gizi_buruk + bmi.gizi_kurang) / computedBmi : null,
     overPrevalence: computedBmi > 0 ? (bmi.gizi_lebih + bmi.obesitas) / computedBmi : null,

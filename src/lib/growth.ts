@@ -8,7 +8,15 @@
  *  - IMT/U memakai koreksi "adjusted" untuk |z| > 3 (SD3/SD23), TB/U tidak (L = 1).
  * Usia < 61 bulan (standar WHO 2006) atau > 228 bulan → tidak dihitung.
  */
-import { BMI_FOR_AGE, HEIGHT_FOR_AGE, WHO2007_MAX_MONTH, WHO2007_MIN_MONTH, type Lms } from './growthReference';
+import {
+  BMI_FOR_AGE,
+  HEIGHT_FOR_AGE,
+  WEIGHT_FOR_AGE,
+  WFA_MAX_MONTH,
+  WHO2007_MAX_MONTH,
+  WHO2007_MIN_MONTH,
+  type Lms,
+} from './growthReference';
 import { parseDate } from './format';
 
 export type Sex = 'male' | 'female';
@@ -77,6 +85,15 @@ export function bmiForAgeZ(bmi: number | null, sex: Sex | null, months: number |
   const lms = lmsAt(BMI_FOR_AGE[sex], months);
   if (!lms) return null;
   const z = adjustedZ(bmi, lms);
+  return Number.isFinite(z) ? z : null;
+}
+
+/** BB/U: WHO 2007 hanya 61–120 bulan; koreksi |z| > 3 seperti anthroplus. */
+export function weightForAgeZ(weightKg: number | null, sex: Sex | null, months: number | null): number | null {
+  if (weightKg === null || !sex || months === null || months > WFA_MAX_MONTH) return null;
+  const lms = lmsAt(WEIGHT_FOR_AGE[sex], months);
+  if (!lms) return null;
+  const z = adjustedZ(weightKg, lms);
   return Number.isFinite(z) ? z : null;
 }
 
@@ -166,6 +183,50 @@ export function heightStatus(z: number | null): HeightStatus | null {
   return 'tinggi';
 }
 
+/**
+ * BB/U — kategori Permenkes 2/2020 (tabel BB/U). Hanya informasi tambahan untuk 5–10 th:
+ * status gizi anak sekolah tetap IMT/U.
+ */
+export type WeightStatus = 'sangat_kurang' | 'kurang' | 'normal' | 'risiko_lebih';
+export const WEIGHT_STATUSES: WeightStatus[] = ['sangat_kurang', 'kurang', 'normal', 'risiko_lebih'];
+
+export const WEIGHT_STATUS_LABEL: Record<WeightStatus, string> = {
+  sangat_kurang: 'BB sangat kurang',
+  kurang: 'BB kurang',
+  normal: 'BB normal',
+  risiko_lebih: 'Risiko BB lebih',
+};
+
+export const WEIGHT_STATUS_RANGE: Record<WeightStatus, string> = {
+  sangat_kurang: 'z < −3',
+  kurang: '−3 ≤ z < −2',
+  normal: '−2 ≤ z ≤ +1',
+  risiko_lebih: 'z > +1',
+};
+
+export const WEIGHT_STATUS_COLORS: Record<WeightStatus, string> = {
+  sangat_kurang: '#C0392B',
+  kurang: '#C8841F',
+  normal: '#2A9D8F',
+  risiko_lebih: '#4F86E8',
+};
+
+export function weightStatus(z: number | null): WeightStatus | null {
+  if (z === null) return null;
+  if (z < -3) return 'sangat_kurang';
+  if (z < -2) return 'kurang';
+  if (z <= 1) return 'normal';
+  return 'risiko_lebih';
+}
+
+/** Alasan BB/U tidak dihitung (null bila dihitung / umum sudah dijelaskan notComputedReason). */
+export function weightNotComputedReason(sex: Sex | null, months: number | null): string | null {
+  const base = notComputedReason(sex, months);
+  if (base) return base;
+  if (months !== null && months > WFA_MAX_MONTH) return 'BB/U hanya untuk usia 5–10 th (WHO 2007)';
+  return null;
+}
+
 /** Alasan z-score tidak dihitung (untuk tooltip/tabel). */
 export function notComputedReason(sex: Sex | null, months: number | null): string | null {
   if (!sex) return 'Jenis kelamin kosong';
@@ -175,18 +236,27 @@ export function notComputedReason(sex: Sex | null, months: number | null): strin
   return null;
 }
 
+export type GrowthIndicator = 'bmi' | 'height' | 'weight';
+
+/** LMS acuan WHO 2007 pada usia tertentu (null di luar rentang indikator). */
+export function referenceLms(indicator: GrowthIndicator, sex: Sex | null, months: number | null): Lms | null {
+  if (!sex || months === null) return null;
+  if (indicator === 'weight') return months > WFA_MAX_MONTH ? null : lmsAt(WEIGHT_FOR_AGE[sex], months);
+  return lmsAt(indicator === 'bmi' ? BMI_FOR_AGE[sex] : HEIGHT_FOR_AGE[sex], months);
+}
+
 /** Kurva referensi SD (−3, −2, 0, +2, +3) untuk rentang usia (bulan). */
 export const REFERENCE_SDS = [-3, -2, 0, 2, 3] as const;
 
 export function referenceCurve(
-  indicator: 'bmi' | 'height',
+  indicator: GrowthIndicator,
   sex: Sex,
   fromMonth: number,
   toMonth: number,
 ): Array<{ months: number; sd: Record<(typeof REFERENCE_SDS)[number], number> }> {
-  const table = indicator === 'bmi' ? BMI_FOR_AGE[sex] : HEIGHT_FOR_AGE[sex];
+  const table = indicator === 'bmi' ? BMI_FOR_AGE[sex] : indicator === 'height' ? HEIGHT_FOR_AGE[sex] : WEIGHT_FOR_AGE[sex];
   const start = Math.max(WHO2007_MIN_MONTH, Math.floor(fromMonth));
-  const end = Math.min(WHO2007_MAX_MONTH, Math.ceil(toMonth));
+  const end = Math.min(indicator === 'weight' ? WFA_MAX_MONTH : WHO2007_MAX_MONTH, Math.ceil(toMonth));
   const rows = [];
   for (let month = start; month <= end; month += 1) {
     const lms = table[month - WHO2007_MIN_MONTH];

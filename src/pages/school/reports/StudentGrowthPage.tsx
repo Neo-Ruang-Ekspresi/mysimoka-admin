@@ -23,9 +23,16 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { tableRowVariants } from '@/components/ui/Animated';
 import { MeasureLineChart, ReferenceBandChart } from '@/components/charts/ReportCharts';
 import { SERIES } from '@/components/charts/Charts';
-import { BmiStatusBadge, formatAgeMonths, formatZ, HeightStatusBadge, MethodNote } from './shared';
+import { ReferenceInfo } from '@/components/growth/ReferenceInfo';
+import { BmiStatusBadge, formatAgeMonths, formatZ, HeightStatusBadge, MethodNote, WeightStatusBadge } from './shared';
 
-type RefTab = 'bmi' | 'height';
+type RefTab = 'bmi' | 'height' | 'weight';
+
+const REF_TAB: Record<RefTab, { unit: string; name: string; z: (p: GrowthPoint) => number | null; value: (p: GrowthPoint) => number | null }> = {
+  bmi: { unit: 'kg/m²', name: 'IMT siswa', z: p => p.bmiZ, value: p => p.bmi },
+  height: { unit: 'cm', name: 'Tinggi siswa', z: p => p.hfaZ, value: p => p.heightCm },
+  weight: { unit: 'kg', name: 'Berat siswa', z: p => p.wfaZ, value: p => p.weightKg },
+};
 
 /** Halaman pertumbuhan satu siswa: `${basePath}/siswa/:studentId`. */
 export function StudentGrowthPage() {
@@ -55,7 +62,8 @@ export function StudentGrowthPage() {
   const latest = points.length > 0 ? points[points.length - 1] : null;
 
   const reference = useMemo(() => {
-    const plotted = points.filter(point => point.ageMonths !== null && (refTab === 'bmi' ? point.bmiZ !== null : point.hfaZ !== null));
+    const tab = REF_TAB[refTab];
+    const plotted = points.filter(point => point.ageMonths !== null && tab.z(point) !== null);
     if (!sex || plotted.length === 0) return { curve: [], points: [] };
     const ages = plotted.map(point => point.ageMonths!);
     const from = Math.min(...ages) - 6;
@@ -64,7 +72,7 @@ export function StudentGrowthPage() {
       curve: referenceCurve(refTab, sex, from, to),
       points: plotted.map(point => ({
         months: point.ageMonths!,
-        value: (refTab === 'bmi' ? point.bmi : point.heightCm)!,
+        value: tab.value(point)!,
         date: point.date,
       })),
     };
@@ -128,6 +136,7 @@ export function StudentGrowthPage() {
           <div className="flex flex-wrap gap-2">
             {latest ? <BmiStatusBadge status={latest.bmiStatus} reason={latest.reason} /> : null}
             {latest?.heightStatus ? <HeightStatusBadge status={latest.heightStatus} /> : null}
+            {latest?.weightStatus ? <WeightStatusBadge status={latest.weightStatus} /> : null}
             {!view.isActive ? <Badge tone="neutral">Nonaktif</Badge> : null}
           </div>
         </div>
@@ -158,7 +167,11 @@ export function StudentGrowthPage() {
 
         <Card>
           <CardHeader
-            title="Posisi terhadap referensi WHO 2007"
+            title={
+              <span className="inline-flex items-center gap-1">
+                Posisi terhadap referensi WHO 2007 <ReferenceInfo indicator={refTab} sex={sex} months={latest?.ageMonths ?? null} />
+              </span>
+            }
             description="Titik siswa di atas kurva −3, −2, median, +2, +3 SD (sumbu-x: usia)."
             actions={
               <Tabs<RefTab>
@@ -169,6 +182,7 @@ export function StudentGrowthPage() {
                 items={[
                   { value: 'bmi', label: 'IMT/U' },
                   { value: 'height', label: 'TB/U' },
+                  { value: 'weight', label: 'BB/U' },
                 ]}
               />
             }
@@ -177,12 +191,12 @@ export function StudentGrowthPage() {
             <ReferenceBandChart
               curve={reference.curve}
               points={reference.points}
-              unit={refTab === 'bmi' ? 'kg/m²' : 'cm'}
-              name={refTab === 'bmi' ? 'IMT siswa' : 'Tinggi siswa'}
+              unit={REF_TAB[refTab].unit}
+              name={REF_TAB[refTab].name}
             />
             <MethodNote>
-              Kurva dari parameter LMS WHO Growth Reference 2007 (5–19 th). Pengukuran sebelum usia 5 th tidak diplot
-              (standar WHO 2006 belum dipasang).
+              Kurva dari parameter LMS WHO Growth Reference 2007 (5–19 th; BB/U hanya 5–10 th). Pengukuran sebelum usia 5 th
+              tidak diplot (standar WHO 2006 belum dipasang).
             </MethodNote>
           </CardBody>
         </Card>

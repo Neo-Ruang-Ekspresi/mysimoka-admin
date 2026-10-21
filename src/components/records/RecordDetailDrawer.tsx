@@ -24,7 +24,9 @@ import { Badge, ImmunizationStatusBadge, type Tone } from '@/components/ui/Badge
 import { Button } from '@/components/ui/Button';
 import { Drawer } from '@/components/ui/Drawer';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { BmiStatusBadge, formatAgeMonths, formatZ, HeightStatusBadge } from '@/pages/school/reports/shared';
+import { ReferenceInfo } from '@/components/growth/ReferenceInfo';
+import { normalizeSex } from '@/lib/growth';
+import { BmiStatusBadge, formatAgeMonths, formatZ, HeightStatusBadge, WeightStatusBadge } from '@/pages/school/reports/shared';
 
 export type AttemptsProps = {
   /** Percobaan untuk (sesi, siswa) record ini, terbaru dulu. */
@@ -78,10 +80,10 @@ function Section({ title, children, action }: { title: string; children: ReactNo
   );
 }
 
-function Metric({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
+function Metric({ label, value, hint }: { label: ReactNode; value: ReactNode; hint?: ReactNode }) {
   return (
     <div className="rounded-lg border border-line bg-card-muted/40 px-3 py-2.5">
-      <p className="text-xs text-fg-subtle">{label}</p>
+      <div className="text-xs text-fg-subtle">{label}</div>
       <p className="mt-0.5 text-lg font-semibold tabular-nums text-fg">{value}</p>
       {hint ? <div className="mt-0.5 text-xs text-fg-subtle">{hint}</div> : null}
     </div>
@@ -156,6 +158,12 @@ export function MeasurementRecordDrawer({
   const view = students.data?.find(item => item.id === record.student_id) ?? null;
   const student = view?.student ?? { gender: null, date_of_birth: null };
   const point = toGrowthPoint(record, student);
+  const sex = normalizeSex(student.gender);
+  const infoLabel = (text: string, indicator: 'bmi' | 'height' | 'weight') => (
+    <span className="inline-flex items-center gap-1">
+      {text} <ReferenceInfo indicator={indicator} sex={sex} months={point.ageMonths} />
+    </span>
+  );
   const session = sessions.data?.find(item => item.id === record.session_id) ?? null;
   const className = classes.data?.find(item => item.id === session?.class_id)?.name ?? view?.className ?? '-';
   const category = bmiCategory(point.bmi);
@@ -199,8 +207,13 @@ export function MeasurementRecordDrawer({
               )
             }
           />
-          <Metric label="Status gizi (IMT/U)" value={<BmiStatusBadge status={point.bmiStatus} reason={point.reason} />} hint={`z ${formatZ(point.bmiZ)}`} />
-          <Metric label="TB/U" value={<HeightStatusBadge status={point.heightStatus} />} hint={`z ${formatZ(point.hfaZ)}`} />
+          <Metric label={infoLabel('Status gizi (IMT/U)', 'bmi')} value={<BmiStatusBadge status={point.bmiStatus} reason={point.reason} />} hint={`z ${formatZ(point.bmiZ)}`} />
+          <Metric label={infoLabel('TB/U', 'height')} value={<HeightStatusBadge status={point.heightStatus} />} hint={`z ${formatZ(point.hfaZ)}`} />
+          <Metric
+            label={infoLabel('BB/U', 'weight')}
+            value={<WeightStatusBadge status={point.weightStatus} reason={point.weightReason} />}
+            hint={point.wfaZ !== null ? `z ${formatZ(point.wfaZ)}` : (point.weightReason ?? undefined)}
+          />
           <Metric label="Usia saat ukur" value={<span className="text-base">{formatAgeMonths(point.ageMonths)}</span>} hint={point.reason ?? undefined} />
         </div>
       </Section>

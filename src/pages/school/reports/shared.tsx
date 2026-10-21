@@ -12,8 +12,13 @@ import {
   HEIGHT_STATUS_RANGE,
   HEIGHT_STATUSES,
   NOT_COMPUTED_COLOR,
+  WEIGHT_STATUS_COLORS,
+  WEIGHT_STATUS_LABEL,
+  WEIGHT_STATUS_RANGE,
+  WEIGHT_STATUSES,
   type BmiStatus,
   type HeightStatus,
+  type WeightStatus,
 } from '@/lib/growth';
 import type { StatusCounts } from '@/lib/growthReport';
 
@@ -45,6 +50,20 @@ export function heightStatusItems(counts: StatusCounts<HeightStatus>, withNotCom
   return items;
 }
 
+export function weightStatusItems(counts: StatusCounts<WeightStatus>, withNotComputed = true): StatusItem[] {
+  const items: StatusItem[] = WEIGHT_STATUSES.map(key => ({
+    key,
+    label: WEIGHT_STATUS_LABEL[key],
+    color: WEIGHT_STATUS_COLORS[key],
+    count: counts[key],
+    hint: WEIGHT_STATUS_RANGE[key],
+  }));
+  if (withNotComputed && counts.notComputed > 0) {
+    items.push({ key: 'notComputed', label: 'Tidak dihitung', color: NOT_COMPUTED_COLOR, count: counts.notComputed, hint: '>10 th / <5 th / data kurang' });
+  }
+  return items;
+}
+
 const BMI_TONE: Record<BmiStatus, Tone> = {
   gizi_buruk: 'danger',
   gizi_kurang: 'warning',
@@ -68,6 +87,18 @@ export function BmiStatusBadge({ status, reason }: { status: BmiStatus | null; r
 export function HeightStatusBadge({ status }: { status: HeightStatus | null }) {
   if (!status) return <span className="text-xs text-fg-subtle">-</span>;
   return <Badge tone={HEIGHT_TONE[status]}>{HEIGHT_STATUS_LABEL[status]}</Badge>;
+}
+
+const WEIGHT_TONE: Record<WeightStatus, Tone> = {
+  sangat_kurang: 'danger',
+  kurang: 'warning',
+  normal: 'success',
+  risiko_lebih: 'brand',
+};
+
+export function WeightStatusBadge({ status, reason }: { status: WeightStatus | null; reason?: string | null }) {
+  if (!status) return <span className="text-xs text-fg-subtle" title={reason ?? undefined}>-</span>;
+  return <Badge tone={WEIGHT_TONE[status]}>{WEIGHT_STATUS_LABEL[status]}</Badge>;
 }
 
 export function formatZ(z: number | null | undefined): string {
