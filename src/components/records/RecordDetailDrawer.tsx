@@ -26,6 +26,7 @@ import { Drawer } from '@/components/ui/Drawer';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { ReferenceInfo } from '@/components/growth/ReferenceInfo';
 import { normalizeSex } from '@/lib/growth';
+import { cdcBmiPercentile, cdcCategory } from '@/lib/cdc';
 import { BmiStatusBadge, formatAgeMonths, formatZ, HeightStatusBadge, WeightStatusBadge } from '@/pages/school/reports/shared';
 
 export type AttemptsProps = {
@@ -159,6 +160,8 @@ export function MeasurementRecordDrawer({
   const student = view?.student ?? { gender: null, date_of_birth: null };
   const point = toGrowthPoint(record, student);
   const sex = normalizeSex(student.gender);
+  const cdcPercentile = cdcBmiPercentile(point.bmi, sex, point.ageMonths);
+  const cdcText = cdcPercentile === null ? '-' : `P${Math.round(cdcPercentile)} · ${cdcCategory(cdcPercentile)}`;
   const infoLabel = (text: string, indicator: 'bmi' | 'height' | 'weight') => (
     <span className="inline-flex items-center gap-1">
       {text} <ReferenceInfo indicator={indicator} sex={sex} months={point.ageMonths} />
@@ -204,6 +207,11 @@ export function MeasurementRecordDrawer({
             label="Jenis kelamin"
             value={<span className="text-base">{genderLabel(student.gender)}</span>}
             hint={sex ? undefined : 'Kosong: z-score tidak dihitung'}
+          />
+          <Metric
+            label="Pembanding CDC 2000"
+            value={<span className="text-base">{cdcText}</span>}
+            hint="Hanya pembanding; status resmi = IMT/U Permenkes"
           />
           <Metric label="Usia saat ukur" value={<span className="text-base">{formatAgeMonths(point.ageMonths)}</span>} hint={point.reason ?? undefined} />
         </div>
