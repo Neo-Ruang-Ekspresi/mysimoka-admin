@@ -29,6 +29,7 @@ import { RowActions } from '@/components/ui/RowActions';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { TeacherDetailDrawer } from './teachers/TeacherDetailDrawer';
+import { ImportTeachersButton } from '@/components/importExport/ImportTeachersButton';
 
 const isEnabled = (row: MembershipRow) => isConnectedMembershipStatus(row.status ?? 'active');
 const memberName = (row: MembershipRow) => row.user?.full_name ?? row.user?.email ?? 'Anggota';
@@ -162,9 +163,12 @@ export function TeachersPage() {
 
   const joinCode = profile.data?.join_code;
   const addButton = !canEdit ? null : (
-    <Button icon={<UserPlus className="size-4" />} onClick={() => adder.show(true)}>
-      Tambah guru
-    </Button>
+    <div className="flex flex-wrap gap-2">
+      <ImportTeachersButton />
+      <Button icon={<UserPlus className="size-4" />} onClick={() => adder.show(true)}>
+        Tambah guru
+      </Button>
+    </div>
   );
 
   return (
