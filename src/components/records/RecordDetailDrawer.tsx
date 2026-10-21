@@ -16,7 +16,7 @@ import { HISTORY_ACTION_LABEL, type HistoryEntry } from '@/api/recordHistory';
 import type { ImmunizationRecordRow, MeasurementRecordRow } from '@/api/types';
 import { formatReferenceDiff, readReference, referenceDiff } from '@/api/measurementReference';
 import { toGrowthPoint } from '@/lib/growthReport';
-import { bmiCategory, computeBmi, NUTRITION_COLORS } from '@/lib/nutrition';
+import { computeBmi } from '@/lib/nutrition';
 import { formatDate, formatDateTime, formatDecimal, genderLabel } from '@/lib/format';
 import { captureMethodLabel, captureSourceLabel, userLabel } from '@/lib/records';
 import { cn } from '@/lib/object';
@@ -166,7 +166,6 @@ export function MeasurementRecordDrawer({
   );
   const session = sessions.data?.find(item => item.id === record.session_id) ?? null;
   const className = classes.data?.find(item => item.id === session?.class_id)?.name ?? view?.className ?? '-';
-  const category = bmiCategory(point.bmi);
   const list = attempts ?? [];
   const lastChange = list[0]?.changedAt ?? null;
   const reference = readReference(record);
@@ -193,20 +192,7 @@ export function MeasurementRecordDrawer({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Metric label="Tinggi badan" value={`${formatDecimal(point.heightCm)} cm`} />
           <Metric label="Berat badan" value={`${formatDecimal(point.weightKg)} kg`} />
-          <Metric
-            label="IMT"
-            value={formatDecimal(point.bmi)}
-            hint={
-              category ? (
-                <span className="inline-flex items-center gap-1">
-                  <span className="size-2 rounded-full" style={{ background: NUTRITION_COLORS[category] }} aria-hidden />
-                  {category} (ambang dewasa)
-                </span>
-              ) : (
-                'kg/m²'
-              )
-            }
-          />
+          <Metric label="IMT" value={formatDecimal(point.bmi)} hint="kg/m² · status: lihat IMT/U" />
           <Metric label={infoLabel('Status gizi (IMT/U)', 'bmi')} value={<BmiStatusBadge status={point.bmiStatus} reason={point.reason} />} hint={`z ${formatZ(point.bmiZ)}`} />
           <Metric label={infoLabel('TB/U', 'height')} value={<HeightStatusBadge status={point.heightStatus} />} hint={`z ${formatZ(point.hfaZ)}`} />
           <Metric

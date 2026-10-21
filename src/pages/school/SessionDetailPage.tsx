@@ -72,11 +72,17 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
       item => item.session_id === session.id,
     );
     const byStudent = new Map(sessionRecords.map(item => [item.student_id, item]));
+    const studentRowById = new Map((students.data ?? []).map(item => [item.id, item.student]));
     const toRow = (studentId: string, base: Omit<RosterRow, 'measurement' | 'immunization' | 'recordedAt'>): RosterRow => {
       const record = byStudent.get(studentId);
       if (!record) return { ...base, measurement: null, immunization: null, recordedAt: null };
       return kind === 'measurement'
-        ? { ...base, measurement: toMeasurementView(record as MeasurementRecordRow), immunization: null, recordedAt: (record as MeasurementRecordRow).measured_at }
+        ? {
+            ...base,
+            measurement: toMeasurementView(record as MeasurementRecordRow, studentRowById.get(studentId)),
+            immunization: null,
+            recordedAt: (record as MeasurementRecordRow).measured_at,
+          }
         : { ...base, measurement: null, immunization: record as ImmunizationRecordRow, recordedAt: (record as ImmunizationRecordRow).administered_at };
     };
     // Sama dengan mobile: roster = enrollment aktif di kelas sesi.

@@ -57,7 +57,7 @@ export function StudentsPage() {
   });
 
   const rows = useMemo<Row[]>(() => {
-    const latest = latestMeasurementByStudent(mRecords.data ?? []);
+    const latest = latestMeasurementByStudent(mRecords.data ?? [], students.data ?? []);
     const immunizations = new Map<string, number>();
     for (const record of iRecords.data ?? []) {
       if (record.status === 'given') immunizations.set(record.student_id, (immunizations.get(record.student_id) ?? 0) + 1);

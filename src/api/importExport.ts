@@ -328,7 +328,7 @@ function measurementRows(
   const byStudent = new Map(records.map(item => [item.student_id, item]));
   return roster.map((item, index) => {
     const record = byStudent.get(item.studentId) ?? null;
-    const view = record ? toMeasurementView(record) : null;
+    const view = record ? toMeasurementView(record, item.student?.student) : null;
     return [
       index + 1,
       item.student?.student.student_number ?? '',
@@ -481,7 +481,9 @@ export async function buildRecapExport(
   type SummaryRow = { date: string; cells: CellValue[] };
   const summary: SummaryRow[] = [];
   for (const session of mSessions) {
-    const records = mRecords.filter(item => item.session_id === session.id).map(toMeasurementView);
+    const records = mRecords
+      .filter(item => item.session_id === session.id)
+      .map(item => toMeasurementView(item, studentById.get(item.student_id)?.student));
     const total = rosterSize(session.class_id);
     summary.push({
       date: session.session_date,
@@ -543,7 +545,7 @@ export async function buildRecapExport(
     .sort((a, b) => b.measured_at.localeCompare(a.measured_at))
     .map(record => {
       const session = sessionById.get(record.session_id);
-      const view = toMeasurementView(record);
+      const view = toMeasurementView(record, studentById.get(record.student_id)?.student);
       return [
         session?.name ?? '-',
         dateCell(session?.session_date),

@@ -171,7 +171,7 @@ export function StudentDetailDrawer({
   const history = (enrollments.data ?? [])
     .filter(item => item.student_id === student.id)
     .sort((a, b) => (b.enrolled_at ?? b.created_at ?? '').localeCompare(a.enrolled_at ?? a.created_at ?? ''));
-  const measurements = (mRecords.data ?? []).filter(item => item.student_id === student.id).map(toMeasurementView);
+  const measurements = (mRecords.data ?? []).filter(item => item.student_id === student.id).map(item => toMeasurementView(item, s));
   const immunizations = (iRecords.data ?? []).filter(item => item.student_id === student.id);
   const faceRows = faces.data;
   const age = ageInYears(s.date_of_birth);

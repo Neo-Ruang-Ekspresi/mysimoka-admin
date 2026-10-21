@@ -112,13 +112,13 @@ export function heightForAgeZ(heightCm: number | null, sex: Sex | null, months: 
 export type BmiStatus = 'gizi_buruk' | 'gizi_kurang' | 'gizi_baik' | 'gizi_lebih' | 'obesitas';
 export const BMI_STATUSES: BmiStatus[] = ['gizi_buruk', 'gizi_kurang', 'gizi_baik', 'gizi_lebih', 'obesitas'];
 
-export const BMI_STATUS_LABEL: Record<BmiStatus, string> = {
+export const BMI_STATUS_LABEL = {
   gizi_buruk: 'Gizi buruk',
   gizi_kurang: 'Gizi kurang',
   gizi_baik: 'Gizi baik',
   gizi_lebih: 'Gizi lebih',
   obesitas: 'Obesitas',
-};
+} as const satisfies Record<BmiStatus, string>;
 
 export const BMI_STATUS_RANGE: Record<BmiStatus, string> = {
   gizi_buruk: 'z < −3',

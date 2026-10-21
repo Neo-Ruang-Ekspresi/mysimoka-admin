@@ -11,7 +11,7 @@ import type {
 import { monthKey, parseDate } from './format';
 import { readNumber } from './object';
 import { isConnectedMembershipStatus, normalizeRoleKey } from './roles';
-import { bmiCategory, computeBmi, NUTRITION_CATEGORIES, type NutritionCategory } from './nutrition';
+import { computeBmi, NUTRITION_CATEGORIES, nutritionStatus, type NutritionCategory, type NutritionSubject } from './nutrition';
 
 export type Period = { start: string | null; end: string | null; label: string };
 
@@ -67,25 +67,31 @@ export type MeasurementView = {
   heightCm: number | null;
   weightKg: number | null;
   bmi: number | null;
+  /** Status gizi (IMT/U WHO 2007 untuk anak; lihat nutrition.ts); null = tidak dihitung. */
   category: NutritionCategory | null;
 };
 
-export function toMeasurementView(record: MeasurementRecordRow): MeasurementView {
+/** `student` (JK + tanggal lahir) dibutuhkan untuk status gizi anak; tanpa itu category = null. */
+export function toMeasurementView(record: MeasurementRecordRow, student?: NutritionSubject | null): MeasurementView {
   const heightCm = readNumber(record.height_cm);
   const weightKg = readNumber(record.weight_kg);
   const bmi = computeBmi(heightCm, weightKg);
-  return { record, heightCm, weightKg, bmi, category: bmiCategory(bmi) };
+  return { record, heightCm, weightKg, bmi, category: nutritionStatus(bmi, student, record.measured_at) };
 }
 
 /** Record terakhir per siswa (berdasarkan measured_at). */
-export function latestMeasurementByStudent(records: MeasurementRecordRow[]): Map<string, MeasurementView> {
-  const result = new Map<string, MeasurementView>();
+export function latestMeasurementByStudent(
+  records: MeasurementRecordRow[],
+  students: Array<{ id: string; student: NutritionSubject }> = [],
+): Map<string, MeasurementView> {
+  const latest = new Map<string, MeasurementRecordRow>();
   for (const record of records) {
-    const current = result.get(record.student_id);
-    if (!current || record.measured_at > current.record.measured_at) {
-      result.set(record.student_id, toMeasurementView(record));
-    }
+    const current = latest.get(record.student_id);
+    if (!current || record.measured_at > current.measured_at) latest.set(record.student_id, record);
   }
+  const studentById = new Map(students.map(item => [item.id, item.student]));
+  const result = new Map<string, MeasurementView>();
+  for (const [studentId, record] of latest) result.set(studentId, toMeasurementView(record, studentById.get(studentId)));
   return result;
 }
 
@@ -150,7 +156,7 @@ export function computeSchoolAnalytics(input: {
   const mRecords = input.measurementRecords.filter(item => mSessionIds.has(item.session_id));
   const iRecords = input.immunizationRecords.filter(item => iSessionIds.has(item.session_id));
 
-  const latest = latestMeasurementByStudent(mRecords);
+  const latest = latestMeasurementByStudent(mRecords, input.students);
   const measuredIds = new Set([...latest.keys()].filter(id => activeIds.has(id)));
   const immunizedIds = new Set(
     iRecords.filter(item => item.status === 'given' && activeIds.has(item.student_id)).map(item => item.student_id),
