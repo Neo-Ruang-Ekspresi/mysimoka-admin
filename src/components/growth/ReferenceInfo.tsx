@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Info } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { formatDecimal } from '@/lib/format';
+import { cdcBmiAtPercentile } from '@/lib/cdc';
 import {
   BMI_STATUS_COLORS,
   BMI_STATUS_LABEL,
@@ -62,6 +63,89 @@ const INDICATORS: Record<GrowthIndicator, { title: string; short: string; unit: 
     note: 'Informasi tambahan. Untuk anak usia sekolah status gizi tetap ditentukan IMT/U (BB/U tidak membedakan anak pendek dan kurus).',
   },
 };
+
+const CDC_ROWS: Array<{ label: string; range: string; color: string; from: 5 | 85 | 95 | null; to: 5 | 85 | 95 | null }> = [
+  { label: 'BB kurang', range: '< P5', color: BMI_STATUS_COLORS.gizi_kurang, from: null, to: 5 },
+  { label: 'Sehat', range: 'P5 – < P85', color: BMI_STATUS_COLORS.gizi_baik, from: 5, to: 85 },
+  { label: 'BB lebih', range: 'P85 – < P95', color: BMI_STATUS_COLORS.gizi_lebih, from: 85, to: 95 },
+  { label: 'Obesitas', range: '≥ P95', color: BMI_STATUS_COLORS.obesitas, from: 95, to: null },
+];
+
+/** Tombol ⓘ untuk "Pembanding CDC 2000": kategori persentil CDC dan batas IMT untuk anak ini. */
+export function CdcReferenceInfo({ sex, months }: { sex?: Sex | null; months?: number | null }) {
+  const [open, setOpen] = useState(false);
+  const cut = (p: 5 | 85 | 95) => cdcBmiAtPercentile(sex ?? null, months ?? null, p);
+  const known = cut(5) !== null;
+  const at = (p: 5 | 85 | 95) => formatDecimal(cut(p) ?? 0, 1);
+  const valueRange = (row: (typeof CDC_ROWS)[number]) => {
+    if (row.from === null && row.to !== null) return `< ${at(row.to)}`;
+    if (row.to === null && row.from !== null) return `≥ ${at(row.from)}`;
+    return `${at(row.from ?? 5)} – < ${at(row.to ?? 85)}`;
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={event => {
+          event.stopPropagation();
+          setOpen(true);
+        }}
+        className="inline-flex shrink-0 rounded-full p-0.5 align-middle text-fg-subtle transition-colors hover:bg-card-muted hover:text-fg"
+        aria-label="Lihat acuan CDC 2000"
+        title="Acuan CDC 2000"
+      >
+        <Info className="size-3.5" />
+      </button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Pembanding CDC 2000 (IMT menurut umur)"
+        description="CDC Growth Charts 2000, persentil IMT/U usia 2–20 tahun"
+        size="md"
+      >
+        <div className="flex flex-col gap-3 text-sm">
+          <table className="w-full text-left">
+            <thead className="text-xs text-fg-subtle">
+              <tr className="border-b border-line">
+                <th className="py-1.5 pr-3 font-medium">Kategori CDC</th>
+                <th className="py-1.5 pr-3 font-medium">Persentil</th>
+                {known ? <th className="py-1.5 font-medium">IMT (kg/m²)</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {CDC_ROWS.map(row => (
+                <tr key={row.label} className="border-b border-line/60 last:border-0">
+                  <td className="py-1.5 pr-3">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="size-2 rounded-full" style={{ background: row.color }} aria-hidden />
+                      {row.label}
+                    </span>
+                  </td>
+                  <td className="py-1.5 pr-3 tabular-nums">{row.range}</td>
+                  {known ? <td className="py-1.5 tabular-nums">{valueRange(row)}</td> : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {known && sex && months != null ? (
+            <p className="text-xs text-fg-subtle">
+              {`Nilai untuk ${sex === 'male' ? 'laki-laki' : 'perempuan'} usia ${formatAge(months)}.`}
+            </p>
+          ) : null}
+          <ul className="list-disc space-y-1 pl-4 text-xs text-fg-subtle">
+            <li>
+              <b>Hanya pembanding.</b> Status gizi resmi di Indonesia tetap IMT/U Permenkes No. 2/2020 (WHO Growth
+              Reference 2007), yang memakai z-score, bukan persentil.
+            </li>
+            <li>CDC 2000 disusun dari data anak Amerika Serikat; batas kategorinya berbeda dengan Permenkes.</li>
+            <li>Persentil P = persen anak seusia & sejenis kelamin di data acuan yang IMT-nya lebih rendah.</li>
+          </ul>
+        </div>
+      </Modal>
+    </>
+  );
+}
 
 function formatAge(months: number): string {
   const whole = Math.floor(months);

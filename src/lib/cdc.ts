@@ -40,6 +40,19 @@ export function cdcBmiPercentile(bmi: number | null, sex: Sex | null, months: nu
   return Number.isFinite(z) ? normalCdf(z) * 100 : null;
 }
 
+/** z untuk persentil batas kategori CDC. */
+export const CDC_CUTOFF_Z = { 5: -1.6449, 85: 1.0364, 95: 1.6449 } as const;
+
+/** IMT pada persentil batas (P5/P85/P95) untuk usia & jenis kelamin; null di luar 2–20 th. */
+export function cdcBmiAtPercentile(sex: Sex | null, months: number | null, percentile: keyof typeof CDC_CUTOFF_Z): number | null {
+  if (!sex || months === null) return null;
+  const lms = lmsAt(CDC_BMI_FOR_AGE[sex], months);
+  if (!lms) return null;
+  const [l, m, s] = lms;
+  const z = CDC_CUTOFF_Z[percentile];
+  return Math.abs(l) < 1e-9 ? m * Math.exp(s * z) : m * Math.pow(1 + l * s * z, 1 / l);
+}
+
 export function cdcCategory(percentile: number | null): CdcCategory | null {
   if (percentile === null) return null;
   if (percentile < 5) return 'BB kurang';

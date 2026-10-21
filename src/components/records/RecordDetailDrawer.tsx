@@ -24,7 +24,7 @@ import { Badge, ImmunizationStatusBadge, type Tone } from '@/components/ui/Badge
 import { Button } from '@/components/ui/Button';
 import { Drawer } from '@/components/ui/Drawer';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { ReferenceInfo } from '@/components/growth/ReferenceInfo';
+import { CdcReferenceInfo, ReferenceInfo } from '@/components/growth/ReferenceInfo';
 import { normalizeSex } from '@/lib/growth';
 import { cdcBmiPercentile, cdcCategory } from '@/lib/cdc';
 import { BmiStatusBadge, formatAgeMonths, formatZ, HeightStatusBadge, WeightStatusBadge } from '@/pages/school/reports/shared';
@@ -209,7 +209,11 @@ export function MeasurementRecordDrawer({
             hint={sex ? undefined : 'Kosong: z-score tidak dihitung'}
           />
           <Metric
-            label="Pembanding CDC 2000"
+            label={
+              <span className="inline-flex items-center gap-1">
+                Pembanding CDC 2000 <CdcReferenceInfo sex={sex} months={point.ageMonths} />
+              </span>
+            }
             value={<span className="text-base">{cdcText}</span>}
             hint="Hanya pembanding; status resmi = IMT/U Permenkes"
           />
