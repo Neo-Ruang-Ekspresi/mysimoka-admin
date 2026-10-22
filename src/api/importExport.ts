@@ -10,7 +10,7 @@
  */
 import { gql } from './graphql';
 import { errorMessage } from './errors';
-import { readReference } from './measurementReference';
+import { readReference, SHOW_REFERENCE } from './measurementReference';
 import {
   fetchClasses,
   fetchEnrollments,
@@ -271,12 +271,14 @@ function sessionRoster(
 }
 
 /** Data pembanding (alat lain) + selisih (hasil alat − pembanding). Kosong bila tidak diisi. */
-const REFERENCE_COLUMNS = [
-  { header: 'Berat pembanding (kg)', width: 14 },
-  { header: 'Tinggi pembanding (cm)', width: 14 },
-  { header: 'Selisih berat', width: 12 },
-  { header: 'Selisih tinggi', width: 12 },
-];
+const REFERENCE_COLUMNS = SHOW_REFERENCE
+  ? [
+      { header: 'Berat pembanding (kg)', width: 14 },
+      { header: 'Tinggi pembanding (cm)', width: 14 },
+      { header: 'Selisih berat', width: 12 },
+      { header: 'Selisih tinggi', width: 12 },
+    ]
+  : [];
 
 function signedCell(value: number | null | undefined): CellValue {
   if (value === null || value === undefined || !Number.isFinite(value)) return null;
@@ -284,6 +286,7 @@ function signedCell(value: number | null | undefined): CellValue {
 }
 
 function referenceCells(record: MeasurementRecordRow | null): CellValue[] {
+  if (!SHOW_REFERENCE) return [];
   const ref = readReference(record);
   return [numberCell(ref?.weightKg, 2), numberCell(ref?.heightCm, 2), signedCell(ref?.weightDiff), signedCell(ref?.heightDiff)];
 }

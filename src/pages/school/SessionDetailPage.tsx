@@ -9,7 +9,7 @@ import { attemptKey } from '@/api/recordHistory';
 import { captureSourceLabel } from '@/lib/records';
 import { AttemptsBadge, ImmunizationRecordDrawer, MeasurementRecordDrawer, ReferenceNote } from '@/components/records/RecordDetailDrawer';
 import { deleteRecord, deleteRecords } from '@/api/crud/records';
-import { readReference } from '@/api/measurementReference';
+import { readReference, SHOW_REFERENCE } from '@/api/measurementReference';
 import type { ImmunizationRecordRow, ImmunizationRecordStatus, MeasurementRecordRow, SessionStatus } from '@/api/types';
 import { toMeasurementView, type MeasurementView } from '@/lib/analytics';
 import { formatDate, formatDateTime, formatDecimal, formatNumber, formatPercent, genderLabel } from '@/lib/format';
@@ -361,10 +361,14 @@ export function SessionDetailPage({ kind }: { kind: SessionKind }) {
               value: (row: RosterRow) => (row.measurement?.weightStatus ? WEIGHT_STATUS_LABEL[row.measurement.weightStatus] : ''),
             },
             { header: 'z BB/U', value: (row: RosterRow) => row.measurement?.wfaZ?.toFixed(2) },
-            { header: 'Berat pembanding (kg)', value: (row: RosterRow) => readReference(row.measurement?.record)?.weightKg },
-            { header: 'Tinggi pembanding (cm)', value: (row: RosterRow) => readReference(row.measurement?.record)?.heightCm },
-            { header: 'Selisih berat (kg)', value: (row: RosterRow) => readReference(row.measurement?.record)?.weightDiff },
-            { header: 'Selisih tinggi (cm)', value: (row: RosterRow) => readReference(row.measurement?.record)?.heightDiff },
+            ...(SHOW_REFERENCE
+              ? [
+                  { header: 'Berat pembanding (kg)', value: (row: RosterRow) => readReference(row.measurement?.record)?.weightKg },
+                  { header: 'Tinggi pembanding (cm)', value: (row: RosterRow) => readReference(row.measurement?.record)?.heightCm },
+                  { header: 'Selisih berat (kg)', value: (row: RosterRow) => readReference(row.measurement?.record)?.weightDiff },
+                  { header: 'Selisih tinggi (cm)', value: (row: RosterRow) => readReference(row.measurement?.record)?.heightDiff },
+                ]
+              : []),
             { header: 'Metode', value: (row: RosterRow) => row.measurement?.record.capture_source },
             { header: 'Catatan', value: (row: RosterRow) => row.measurement?.record.notes },
           ]

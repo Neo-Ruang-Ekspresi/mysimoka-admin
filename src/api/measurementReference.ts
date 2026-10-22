@@ -11,6 +11,12 @@ import type { MeasurementRecordRow } from './types';
 
 const REFERENCE_FIELDS = 'reference_weight_kg reference_height_cm';
 
+/**
+ * Sementara disembunyikan: false → input form, detail, riwayat, dan kolom ekspor pembanding tidak
+ * tampil (data di backend tetap utuh, tidak ditimpa). Ubah ke true untuk menampilkan lagi.
+ */
+export const SHOW_REFERENCE = false;
+
 let referenceSupported = true;
 
 function isMissingReferenceField(error: unknown): boolean {
@@ -19,7 +25,7 @@ function isMissingReferenceField(error: unknown): boolean {
 
 /** false setelah backend terbukti belum punya kolom pembanding (form menyembunyikan input). */
 export function isReferenceSupported(): boolean {
-  return referenceSupported;
+  return SHOW_REFERENCE && referenceSupported;
 }
 
 /** Field `_set`/insert untuk kolom pembanding; kosong bila tidak dikirim (undefined). */
@@ -52,7 +58,7 @@ export type MeasurementReference = {
 
 /** Nilai pembanding + selisih dari satu record; null bila kedua pembanding kosong. */
 export function readReference(record: MeasurementRecordRow | null | undefined): MeasurementReference | null {
-  if (!record) return null;
+  if (!SHOW_REFERENCE || !record) return null;
   const weightKg = readNumber(record.reference_weight_kg);
   const heightCm = readNumber(record.reference_height_cm);
   if (weightKg === null && heightCm === null) return null;

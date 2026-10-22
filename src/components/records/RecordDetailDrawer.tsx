@@ -14,7 +14,7 @@ import { useClasses, useImmunizationSessions, useMeasurementSessions, useStudent
 import { useMemberNames } from '@/hooks/useRecordHistory';
 import { HISTORY_ACTION_LABEL, type HistoryEntry } from '@/api/recordHistory';
 import type { ImmunizationRecordRow, MeasurementRecordRow } from '@/api/types';
-import { formatReferenceDiff, readReference, referenceDiff } from '@/api/measurementReference';
+import { formatReferenceDiff, readReference, referenceDiff, SHOW_REFERENCE } from '@/api/measurementReference';
 import { toGrowthPoint } from '@/lib/growthReport';
 import { computeBmi } from '@/lib/nutrition';
 import { formatDate, formatDateTime, formatDecimal, genderLabel } from '@/lib/format';
@@ -300,7 +300,7 @@ export function MeasurementRecordDrawer({
                       </span>
                       <span>IMT {formatDecimal(bmi)}</span>
                     </p>
-                    {entry.referenceHeightCm !== null || entry.referenceWeightKg !== null ? (
+                    {SHOW_REFERENCE && (entry.referenceHeightCm !== null || entry.referenceWeightKg !== null) ? (
                       <p className="mt-0.5 text-xs tabular-nums text-fg-muted">
                         Pembanding
                         {entry.referenceHeightCm !== null
