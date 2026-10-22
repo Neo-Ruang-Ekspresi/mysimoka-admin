@@ -397,7 +397,7 @@ export function AppLayout({
           </button>
           <UserMenu mode={mode} />
         </header>
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">
+        <main className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <AnimatedOutlet />
         </main>
       </div>
